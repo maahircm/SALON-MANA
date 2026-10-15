@@ -11,7 +11,14 @@ use Illuminate\Validation\ValidationException;
 /** Voiding issued invoices and discarding drafts. Nothing financial is ever deleted. */
 class InvoiceLifecycleService
 {
-    public function __construct(private AuditLogger $audit, private InventoryService $inventory) {}
+    public function __construct(
+        private AuditLogger $audit,
+        private InventoryService $inventory,
+        private CommissionService $commissions,
+        private LoyaltyService $loyalty,
+        private CouponService $coupons,
+        private MembershipService $memberships,
+    ) {}
 
     /**
      * Void an invoice that holds no net money. Paid invoices must be refunded first, so cash history stays whole.
@@ -35,6 +42,10 @@ class InvoiceLifecycleService
             }
             $invoice->forceFill(['status' => Invoice::STATUS_VOIDED, 'voided_at' => now(), 'voided_by' => $actor->id, 'void_reason' => $reason, 'updated_by' => $actor->id])->save();
             $this->inventory->reverseForInvoice($invoice, $actor);
+            $this->commissions->reverseForVoid($invoice);
+            $this->loyalty->reverseForVoid($invoice);
+            $this->coupons->reverseForVoid($invoice);
+            $this->memberships->cancelForInvoice($invoice, "Invoice {$invoice->invoice_number} voided");
             $this->audit->log('invoice.voided', $invoice, ['status' => Invoice::STATUS_ISSUED], ['status' => Invoice::STATUS_VOIDED, 'invoice_number' => $invoice->invoice_number], $reason);
 
             return $invoice;

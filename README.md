@@ -85,6 +85,17 @@ Transactions also retry automatically when MySQL reports a deadlock (`App\Suppor
 
 **Upgrading from Phase 3:** `php artisan migrate && php artisan salon:sync-permissions` (new permission `inventory.costs`; grant it to roles that should see costs).
 
+## Phase 5 — HR and CRM extensions
+- **Attendance & leave:** clock in/out (self-service via `attendance.self`, or recorded by HR), manual correction with reason, monthly summaries; leave requests (annual/sick/unpaid/other) with approval; approved leave blocks the employee in availability and booking.
+- **Commissions:** the rule (service/product, percent or fixed, per employee override) and rate are **snapshotted** on each commission row. Base = line net after discounts, before tax. Accrues when the invoice is issued (or when fully paid — *Settings › HR*); refunds and voids adjust proportionally via append-only adjustment rows. Statement, CSV export (formula-injection guarded) and a "my commissions" page for stylists.
+- **Loyalty:** an append-only points ledger. Points are earned when an invoice is **fully paid**, on net spend (excluding tax, memberships and the part paid with points) × earn rate × membership multiplier. Points are redeemed as a payment method (`loyalty`, no cash drawer movement); refunds claw back earned points (never below zero balance). VIP threshold drives the *VIP* segment.
+- **Memberships:** plans sold as POS items; terms (discount %, points multiplier, validity) are snapshotted per customer membership; an active membership discount is applied automatically (a manual discount wins). `php artisan salon:expire-memberships` expires overdue ones.
+- **Promotions & coupons:** percentage or fixed, minimum purchase, date window, total / per-customer limits. Coupons are validated while pricing and **re-validated under lock** when the invoice is issued, allocated across lines to the cent, and released when the invoice is voided.
+- **POS:** totals shown in the till come from a server-side preview endpoint, so what the cashier sees is what is stored.
+- **CRM segments** on the customer list: new, returning, inactive, VIP, owing, members; lifetime value is shown only to users with `pos.invoices`.
+
+**Upgrading from Phase 4:** `php artisan migrate && php artisan salon:sync-permissions` (new permissions `attendance.self`, `leave.request`, `commissions.own`, `pos.void`, `pos.discount_unlimited`; cashiers no longer have `pos.close`).
+
 ## Prerequisites
 PHP 8.3+ with extensions: `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl`, `gd` recommended); Composer 2; MySQL 8.
 Bootstrap and Bootstrap Icons (and later Chart.js) load from pinned CDN URLs — no Node build is needed.

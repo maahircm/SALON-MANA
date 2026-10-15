@@ -24,7 +24,15 @@ use Illuminate\Validation\ValidationException;
  */
 class RefundService
 {
-    public function __construct(private CashDrawerService $drawers, private DocumentNumberService $numbers, private AuditLogger $audit, private InventoryService $inventory) {}
+    public function __construct(
+        private CashDrawerService $drawers,
+        private DocumentNumberService $numbers,
+        private AuditLogger $audit,
+        private InventoryService $inventory,
+        private CommissionService $commissions,
+        private LoyaltyService $loyalty,
+        private MembershipService $memberships,
+    ) {}
 
     /**
      * @param  array<int|string, int|string>  $quantities  invoice_item_id => quantity to refund
@@ -64,7 +72,7 @@ class RefundService
                 throw ValidationException::withMessages(['payment_method_id' => "Only {$capacity} can be refunded to {$method->name} (what was paid with it, less earlier refunds)."]);
             }
 
-            $session = $this->drawers->sessionForTransaction($actor);
+            $session = $method->isLoyalty() ? null : $this->drawers->sessionForTransaction($actor);
             if ($method->isCash() && ! $session) {
                 throw ValidationException::withMessages(['session' => 'Open a cash drawer session to pay a cash refund.']);
             }
@@ -89,6 +97,13 @@ class RefundService
                 }
             }
             $invoice->forceFill(['refunded_total' => Money::add((string) $invoice->refunded_total, $amount), 'updated_by' => $actor->id])->save();
+
+            $this->commissions->reverseForRefund($refund);
+            $this->loyalty->reverseForRefund($refund, $invoice);
+            if ($method->isLoyalty()) {
+                $this->loyalty->creditForRefund($refund, $invoice);
+            }
+            $this->memberships->cancelIfRefunded($invoice);
 
             $this->audit->log('refund.created', $refund, null, [
                 'refund_number' => $refund->refund_number, 'invoice' => $invoice->invoice_number, 'amount' => $amount, 'method' => $method->code,

@@ -24,6 +24,10 @@ class CheckoutService
         private SettingsService $settings,
         private AuditLogger $audit,
         private InventoryService $inventory,
+        private CouponService $coupons,
+        private MembershipService $memberships,
+        private LoyaltyService $loyalty,
+        private CommissionService $commissions,
     ) {}
 
     /**
@@ -33,9 +37,9 @@ class CheckoutService
     {
         return Atomic::run(function () use ($data, $actor) {
             $invoice = $this->resolveDraft($data['draft_id'] ?? null, $actor);
-            $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id);
-            $appointment = $this->appointmentFor($priced['lines']);
+            $appointment = $this->appointmentFor($data['items'] ?? []);
             $customer = $this->customer($appointment?->customer_id ?? ($data['customer_id'] ?? null), $data['customer_id'] ?? null);
+            $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id, $customer, $data['coupon_code'] ?? null);
 
             $invoice ??= new Invoice(['status' => Invoice::STATUS_DRAFT, 'currency' => config('salon.currency'), 'created_by' => $actor->id]);
             $this->fill($invoice, $priced, $customer, $appointment, $data, $actor)->save();
@@ -44,6 +48,29 @@ class CheckoutService
 
             return $invoice;
         });
+    }
+
+    /**
+     * Authoritative totals for the POS screen: the same pricing rules as checkout, nothing is saved.
+     *
+     * @param  array<string, mixed>  $data  customer_id, items[], coupon_code, draft_id
+     * @return array{lines: array<int, array<string, string>>, subtotal: string, discount_total: string, coupon_discount_total: string, tax_total: string, total: string, coupon: ?string, member_discount: ?string}
+     */
+    public function preview(array $data, User $actor): array
+    {
+        $appointment = $this->appointmentFor($data['items'] ?? []);
+        $customer = $this->customer($appointment?->customer_id ?? ($data['customer_id'] ?? null), $data['customer_id'] ?? null);
+        $priced = $this->pricing->price($data['items'] ?? [], $actor, ! empty($data['draft_id']) ? (int) $data['draft_id'] : null, $customer, $data['coupon_code'] ?? null);
+
+        return [
+            'lines' => array_map(fn ($l) => [
+                'gross' => $l['gross'], 'discount_amount' => $l['discount_amount'], 'discount_source' => $l['discount_source'] ?? '', 'coupon_discount' => $l['coupon_discount'],
+                'tax_amount' => $l['tax_amount'], 'line_total' => $l['line_total'], 'description' => $l['description'],
+            ], $priced['lines']),
+            'subtotal' => $priced['subtotal'], 'discount_total' => $priced['discount_total'], 'coupon_discount_total' => $priced['coupon_discount_total'],
+            'tax_total' => $priced['tax_total'], 'total' => $priced['total'], 'coupon' => $priced['coupon']?->code,
+            'member_discount' => $customer?->activeMembership() ? (string) $customer->activeMembership()->discount_percent : null,
+        ];
     }
 
     /**
@@ -83,9 +110,9 @@ class CheckoutService
     {
         return Atomic::run(function () use ($data, $actor, $key) {
             $invoice = $this->resolveDraft($data['draft_id'] ?? null, $actor);
-            $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id);
-            $appointment = $this->appointmentFor($priced['lines']);
+            $appointment = $this->appointmentFor($data['items'] ?? []);
             $customer = $this->customer($appointment?->customer_id ?? ($data['customer_id'] ?? null), $data['customer_id'] ?? null);
+            $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id, $customer, $data['coupon_code'] ?? null);
             $this->inventory->lockForSale($priced['lines']);
             $payments = array_values(array_filter($data['payments'] ?? [], fn ($p) => filled($p['amount'] ?? null) && (float) $p['amount'] > 0));
 
@@ -101,10 +128,6 @@ class CheckoutService
                     throw ValidationException::withMessages(['payments' => 'Credit sales are disabled: the full amount must be paid.']);
                 }
             }
-            if (Money::compare($priced['discount_total'], '0') > 0 && ! $actor->can('pos.discount')) {
-                throw ValidationException::withMessages(['items' => 'You are not allowed to apply discounts.']);
-            }
-
             $invoice ??= new Invoice(['status' => Invoice::STATUS_DRAFT, 'currency' => config('salon.currency'), 'created_by' => $actor->id]);
             $this->fill($invoice, $priced, $customer, $appointment, $data, $actor)->save();
             $this->replaceItems($invoice, $priced['lines']);
@@ -118,17 +141,21 @@ class CheckoutService
                 'issued_by' => $actor->id,
             ])->save();
 
-            // Retail goods and service consumables leave stock in the same transaction as the sale.
+            // Everything below commits or rolls back together with the invoice itself.
             $this->inventory->deductForInvoice($invoice, $actor);
+            $this->coupons->redeem($invoice, $this->couponBase($priced['lines']));
+            $this->memberships->activateForInvoice($invoice, $actor);
 
             if ($payments !== []) {
                 $this->payments->record($invoice, $payments, $actor, $key);
                 $invoice->refresh();
             }
+            $this->loyalty->awardForInvoice($invoice);
+            $this->commissions->accrueForInvoice($invoice);
 
             $this->audit->log('invoice.issued', $invoice, null, [
-                'invoice_number' => $invoice->invoice_number, 'total' => $invoice->total, 'discount_total' => $invoice->discount_total,
-                'discount_override' => $priced['discount_override'], 'paid' => $invoice->amount_paid, 'customer_id' => $invoice->customer_id,
+                'invoice_number' => $invoice->invoice_number, 'total' => $invoice->total, 'discount_total' => $invoice->discount_total, 'coupon_discount_total' => $invoice->coupon_discount_total,
+                'discount_override' => $priced['discount_override'], 'paid' => $invoice->amount_paid, 'customer_id' => $invoice->customer_id, 'coupon' => $priced['coupon']?->code,
             ]);
             DB::afterCommit(fn () => InvoiceIssued::dispatch($invoice));
 
@@ -154,9 +181,19 @@ class CheckoutService
     }
 
     /**
-     * Booked lines tie the invoice to one appointment (and so to its customer).
+     * Value the coupon applied to: lines after line discounts, before tax, excluding memberships.
      *
      * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function couponBase(array $lines): string
+    {
+        return Money::add(...array_map(fn ($l) => $l['item_type'] === 'membership' ? '0.00' : Money::sub($l['gross'], $l['discount_amount']), $lines));
+    }
+
+    /**
+     * Booked lines tie the invoice to one appointment (and so to its customer).
+     *
+     * @param  array<int, array<string, mixed>>  $lines  cart items or priced lines (only appointment_service_id is read)
      */
     private function appointmentFor(array $lines): ?Appointment
     {
@@ -200,6 +237,8 @@ class CheckoutService
             'notes' => $data['notes'] ?? null,
             'subtotal' => $priced['subtotal'],
             'discount_total' => $priced['discount_total'],
+            'coupon_id' => $priced['coupon']?->id,
+            'coupon_discount_total' => $priced['coupon_discount_total'],
             'tax_total' => $priced['tax_total'],
             'total' => $priced['total'],
             'amount_paid' => $invoice->amount_paid ?? '0.00',

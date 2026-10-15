@@ -9,8 +9,10 @@ use App\Models\CustomerPreference;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Services\AuditLogger;
+use App\Services\SettingsService;
 use App\Support\Atomic;
 use App\Support\Money;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -25,7 +27,11 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $this->authorize('customers.view');
-        $customers = $this->filtered($request)->with('preferredEmployee:id,name')->orderBy('name')->paginate(15)->withQueryString();
+        $query = $this->filtered($request)->with('preferredEmployee:id,name');
+        if ($request->user()->can('pos.invoices')) {
+            $query->addSelect(['customers.*', 'ltv' => Invoice::query()->selectRaw('COALESCE(SUM(amount_paid - refunded_total), 0)')->whereColumn('customer_id', 'customers.id')->where('status', Invoice::STATUS_ISSUED)]);
+        }
+        $customers = $query->orderBy('name')->paginate(15)->withQueryString();
 
         return view('customers.index', compact('customers'));
     }
@@ -79,9 +85,9 @@ class CustomerController extends Controller
                 'invoice_count' => (clone $issued)->count(),
             ];
         }
-        // Loyalty points and memberships are attached by the loyalty phase.
+        $loyalty = $request->user()->can('loyalty.view') ? ['account' => $customer->loyaltyAccount, 'membership' => $customer->activeMembership()?->load('plan')] : null;
 
-        return view('customers.show', compact('customer', 'preferences', 'appointments', 'canSensitive', 'billing'));
+        return view('customers.show', compact('customer', 'preferences', 'appointments', 'canSensitive', 'billing', 'loyalty'));
     }
 
     public function edit(Customer $customer)
@@ -217,10 +223,19 @@ class CustomerController extends Controller
         }
         $digits = Customer::normalizePhone($q);
 
-        return response()->json(Customer::query()->where('status', 'active')
+        $withLoyalty = $request->user()->canAny(['loyalty.view', 'pos.use']);
+        $customers = Customer::query()->where('status', 'active')
+            ->when($withLoyalty, fn ($query) => $query->with('loyaltyAccount:customer_id,balance', 'memberships.plan:id,name'))
             ->where(fn ($w) => $w->where('name', 'like', "%{$q}%")->orWhere('customer_number', 'like', "%{$q}%")
                 ->when($digits, fn ($w2) => $w2->orWhere('phone_normalized', 'like', "%{$digits}%")))
-            ->orderBy('name')->limit(10)->get(['id', 'customer_number', 'name', 'phone']));
+            ->orderBy('name')->limit(10)->get(['id', 'customer_number', 'name', 'phone']);
+
+        return response()->json($customers->map(fn (Customer $c) => [
+            'id' => $c->id, 'customer_number' => $c->customer_number, 'name' => $c->name, 'phone' => $c->phone,
+        ] + ($withLoyalty ? [
+            'points' => (int) ($c->loyaltyAccount?->balance ?? 0),
+            'member' => $c->memberships->first(fn ($m) => $m->status === 'active' && $m->starts_on->lte(today()) && $m->ends_on->gte(today()))?->plan->name,
+        ] : []))->values());
     }
 
     public function export(Request $request): StreamedResponse
@@ -264,7 +279,31 @@ class CustomerController extends Controller
             })
             ->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))
             ->when($request->query('consent') === '1', fn ($q) => $q->where('marketing_consent', true))
-            ->when($request->query('birthday_month'), fn ($q, $m) => $q->whereMonth('date_of_birth', (int) $m));
+            ->when($request->query('birthday_month'), fn ($q, $m) => $q->whereMonth('date_of_birth', (int) $m))
+            ->when($request->query('segment'), fn ($q, $segment) => $this->segment($q, (string) $segment));
+    }
+
+    /**
+     * Customer segments for CRM follow-up. Lifetime value = payments received minus refunds on issued invoices.
+     *
+     * @param  Builder<Customer>  $query
+     * @return Builder<Customer>
+     */
+    private function segment($query, string $segment)
+    {
+        $issued = fn () => Invoice::query()->where('status', Invoice::STATUS_ISSUED);
+
+        return match ($segment) {
+            'new' => $query->where('registered_on', '>=', now()->subDays(30)->toDateString()),
+            'returning' => $query->whereIn('id', $issued()->select('customer_id')->whereNotNull('customer_id')->groupBy('customer_id')->havingRaw('COUNT(*) >= 2')),
+            'inactive' => $query->whereDoesntHave('invoices', fn ($q) => $q->where('status', Invoice::STATUS_ISSUED)->where('issued_at', '>=', now()->subDays(90)))
+                ->whereDoesntHave('appointments', fn ($q) => $q->where('start_at', '>=', now()->subDays(90))),
+            'vip' => $query->whereIn('id', $issued()->select('customer_id')->whereNotNull('customer_id')->groupBy('customer_id')
+                ->havingRaw('SUM(amount_paid - refunded_total) >= CAST(? AS DECIMAL(14,2))', [Money::fromMinor(Money::toMinor((string) app(SettingsService::class)->get('loyalty.vip_threshold', '500')))])),
+            'owing' => $query->whereIn('id', $issued()->select('customer_id')->whereNotNull('customer_id')->whereColumn('amount_paid', '<', 'total')),
+            'members' => $query->whereHas('memberships', fn ($q) => $q->where('status', 'active')->whereDate('starts_on', '<=', today())->whereDate('ends_on', '>=', today())),
+            default => $query,
+        };
     }
 
     private function duplicates(string $phone, ?int $ignoreId = null)

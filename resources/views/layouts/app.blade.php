@@ -26,9 +26,19 @@
             ['supplier-returns.index', 'Supplier Returns', 'bi-arrow-return-left', 'inventory.purchasing'],
             ['inventory.valuation', 'Valuation', 'bi-cash-stack', 'inventory.costs'],
         ],
+        'Customers & Loyalty' => [
+            ['loyalty.index', 'Loyalty', 'bi-stars', 'loyalty.view'],
+            ['memberships.index', 'Memberships', 'bi-award', 'loyalty.view'],
+            ['promotions.index', 'Promotions & Coupons', 'bi-tags', 'loyalty.view'],
+        ],
         'Team' => [
             ['employees.index', 'Employees', 'bi-person-badge', 'employees.view'],
             ['schedules.index', 'Staff Schedule', 'bi-calendar3', 'employees.view'],
+            ['attendance.index', 'Attendance', 'bi-clock-history', 'attendance.self'],
+            ['attendance.summary', 'Attendance Summary', 'bi-table', 'employees.attendance'],
+            ['leave.index', 'Leave', 'bi-calendar-x', 'leave.request'],
+            ['commissions.index', 'Commissions', 'bi-cash-coin', 'employees.commissions'],
+            ['commissions.mine', 'My Commissions', 'bi-cash-coin', 'commissions.own'],
             ['rooms.index', 'Chairs & Rooms', 'bi-door-open', 'employees.schedule'],
         ],
         'Administration' => [
@@ -37,6 +47,7 @@
             ['settings.booking', 'Booking Settings', 'bi-gear', 'settings.manage'],
             ['settings.pos', 'POS Settings', 'bi-sliders', 'settings.manage'],
             ['settings.inventory', 'Inventory Settings', 'bi-boxes', 'settings.manage'],
+            ['settings.hr', 'HR & Commission Settings', 'bi-people', 'settings.manage'],
             ['audit.index', 'Audit Log', 'bi-journal-text', 'audit.view'],
         ],
     ];
@@ -49,7 +60,7 @@
         @if ($visible->isNotEmpty())
             <div class="nav-heading">{{ $heading }}</div>
             @foreach ($visible as [$route, $label, $icon])
-                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index', 'cash.daily', 'pos.index', 'movements.index', 'inventory.valuation']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
+                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index', 'cash.daily', 'pos.index', 'movements.index', 'inventory.valuation', 'attendance.summary', 'commissions.mine', 'memberships.index', 'promotions.index']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
             @endforeach
         @endif
     @endforeach

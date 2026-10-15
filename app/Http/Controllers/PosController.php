@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CheckoutRequest;
+use App\Http\Requests\PosPreviewRequest;
 use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\MembershipPlan;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Service;
@@ -15,8 +17,10 @@ use App\Services\CashDrawerService;
 use App\Services\CheckoutService;
 use App\Services\InvoiceLifecycleService;
 use App\Services\SettingsService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class PosController extends Controller
@@ -27,15 +31,15 @@ class PosController extends Controller
     {
         $this->authorize('pos.use');
         $user = $request->user();
-        $cart = ['items' => [], 'customer' => null, 'draft_id' => null, 'notes' => null];
+        $cart = ['items' => [], 'customer' => null, 'draft_id' => null, 'notes' => null, 'coupon_code' => null];
 
         if ($request->query('draft')) {
-            $draft = Invoice::with('items', 'customer')->where('status', Invoice::STATUS_DRAFT)->findOrFail($request->query('draft'));
+            $draft = Invoice::with('items', 'customer', 'coupon')->where('status', Invoice::STATUS_DRAFT)->findOrFail($request->query('draft'));
             abort_unless($draft->created_by === $user->id || $user->can('pos.void'), 403);
             $cart = [
-                'draft_id' => $draft->id, 'customer' => $draft->customer, 'notes' => $draft->notes,
+                'draft_id' => $draft->id, 'customer' => $draft->customer, 'notes' => $draft->notes, 'coupon_code' => $draft->coupon?->code,
                 'items' => $draft->items->map(fn (InvoiceItem $i) => [
-                    'service_id' => $i->service_id, 'product_id' => $i->product_id, 'appointment_service_id' => $i->appointment_service_id, 'quantity' => $i->quantity, 'employee_id' => $i->employee_id,
+                    'service_id' => $i->service_id, 'product_id' => $i->product_id, 'membership_plan_id' => $i->membership_plan_id, 'appointment_service_id' => $i->appointment_service_id, 'quantity' => $i->quantity, 'employee_id' => $i->employee_id,
                     'discount_type' => $i->discount_type, 'discount_value' => (string) $i->discount_value,
                 ])->all(),
             ];
@@ -60,6 +64,8 @@ class PosController extends Controller
             'methods' => PaymentMethod::where('is_active', true)->orderBy('sort_order')->get(),
             'session' => $drawers->openSessionFor($user),
             'drafts' => Invoice::with('customer:id,name')->where('status', Invoice::STATUS_DRAFT)->where('created_by', $user->id)->latest()->limit(10)->get(),
+            'plans' => MembershipPlan::where('is_active', true)->orderBy('name')->get(['id', 'name', 'price', 'duration_days', 'discount_percent']),
+            'loyalty' => ['enabled' => (bool) $settings->get('loyalty.enabled', true), 'perUnit' => (string) $settings->get('loyalty.redeem_points_per_unit', '100')],
             'maxDiscount' => $settings->get('pos.max_discount_percent', '10'),
             'canDiscount' => $user->can('pos.discount'),
         ]);
@@ -82,6 +88,16 @@ class PosController extends Controller
             : "Invoice {$invoice->invoice_number} issued.";
 
         return redirect()->route('invoices.show', $invoice)->with('success', $message);
+    }
+
+    /** JSON: the server's own totals for the current cart (membership and coupon discounts included). */
+    public function preview(PosPreviewRequest $request): JsonResponse
+    {
+        try {
+            return response()->json($this->checkout->preview($request->validated(), $request->user()));
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        }
     }
 
     public function destroyDraft(Request $request, Invoice $invoice): RedirectResponse

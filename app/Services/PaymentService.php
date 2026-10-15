@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 /** Records payments against issued invoices and keeps the invoice's paid amount and status consistent. */
 class PaymentService
 {
-    public function __construct(private CashDrawerService $drawers, private AuditLogger $audit) {}
+    public function __construct(private CashDrawerService $drawers, private AuditLogger $audit, private LoyaltyService $loyalty, private CommissionService $commissions) {}
 
     /**
      * Standalone entry point (settling a balance later). Idempotent per $idempotencyKey.
@@ -103,13 +103,15 @@ class PaymentService
             throw ValidationException::withMessages(['payments' => "The payments ({$sum}) exceed the balance due ({$due})."]);
         }
 
-        $session = $this->drawers->sessionForTransaction($actor);
+        // Points payments never touch a cash drawer; every other method needs the cashier's open session.
+        $needsDrawer = collect($prepared)->contains(fn ($p) => ! $p['method']->isLoyalty());
+        $session = $needsDrawer ? $this->drawers->sessionForTransaction($actor) : null;
         $created = new Collection;
         foreach ($prepared as $p) {
             $payment = Payment::create([
                 'invoice_id' => $invoice->id,
                 'payment_method_id' => $p['method']->id,
-                'cash_drawer_session_id' => $session?->id,
+                'cash_drawer_session_id' => $p['method']->isLoyalty() ? null : $session?->id,
                 'amount' => $p['amount'],
                 'tendered_amount' => $p['tendered'],
                 'change_given' => $p['change'],
@@ -119,6 +121,9 @@ class PaymentService
                 'received_at' => now(),
             ]);
             $created->push($payment);
+            if ($p['method']->isLoyalty()) {
+                $this->loyalty->redeemForPayment($payment, $invoice);
+            }
             $this->audit->log('payment.recorded', $payment, null, [
                 'invoice' => $invoice->invoice_number, 'method' => $p['method']->code, 'amount' => $p['amount'], 'drawer_session' => $session?->id,
             ]);
@@ -130,6 +135,11 @@ class PaymentService
             'payment_status' => $this->statusFor($invoice->total, $paid),
             'updated_by' => $actor->id,
         ])->save();
+
+        if ($invoice->payment_status === 'paid') {
+            $this->loyalty->awardForInvoice($invoice);
+            $this->commissions->accrueForInvoice($invoice);
+        }
 
         DB::afterCommit(function () use ($created): void {
             $created->each(fn (Payment $payment) => PaymentRecorded::dispatch($payment));

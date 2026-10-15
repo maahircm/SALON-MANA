@@ -28,6 +28,8 @@ class CheckoutRequest extends FormRequest
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.service_id' => ['nullable', 'integer'],
             'items.*.product_id' => ['nullable', 'integer'],
+            'items.*.membership_plan_id' => ['nullable', 'integer'],
+            'coupon_code' => ['nullable', 'string', 'max:40'],
             'items.*.appointment_service_id' => ['nullable', 'integer'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1', 'max:99'],
             'items.*.employee_id' => ['nullable', 'integer'],

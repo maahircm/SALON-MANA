@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Enums\AppointmentStatus;
 use App\Models\AppointmentService;
+use App\Models\Coupon;
+use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\MembershipPlan;
 use App\Models\Product;
 use App\Models\Service;
 use App\Models\User;
@@ -19,25 +22,29 @@ use Illuminate\Validation\ValidationException;
  */
 class InvoicePricingService
 {
-    public function __construct(private SettingsService $settings) {}
+    public function __construct(private SettingsService $settings, private CouponService $coupons) {}
 
     /**
-     * @param  array<int, array{service_id?: int|string|null, product_id?: int|string|null, appointment_service_id?: int|string|null, quantity?: int|string, employee_id?: int|string|null, discount_type?: string|null, discount_value?: string|null}>  $items
-     * @return array{lines: array<int, array<string, mixed>>, subtotal: string, discount_total: string, tax_total: string, total: string, discount_override: bool}
+     * @param  array<int, array{service_id?: int|string|null, product_id?: int|string|null, membership_plan_id?: int|string|null, appointment_service_id?: int|string|null, quantity?: int|string, employee_id?: int|string|null, discount_type?: string|null, discount_value?: string|null}>  $items
+     * @return array{lines: array<int, array<string, mixed>>, subtotal: string, discount_total: string, coupon_discount_total: string, tax_total: string, total: string, discount_override: bool, coupon: ?Coupon}
      */
-    public function price(array $items, User $actor, ?int $ignoreInvoiceId = null): array
+    public function price(array $items, User $actor, ?int $ignoreInvoiceId = null, ?Customer $customer = null, ?string $couponCode = null): array
     {
         if ($items === []) {
             throw ValidationException::withMessages(['items' => 'Add at least one item to the sale.']);
         }
 
+        $membershipPercent = (string) ($customer?->activeMembership()?->discount_percent ?? '0');
         $lines = [];
         $errors = [];
         $override = false;
         $seenAppointmentLines = [];
+        $membershipItems = 0;
 
         foreach (array_values($items) as $i => $item) {
-            $line = $this->priceLine($i, $item, $actor, $errors, $override, $ignoreInvoiceId, $seenAppointmentLines);
+            $line = ! empty($item['membership_plan_id'])
+                ? $this->priceMembership($i, $item, $customer, $errors, $membershipItems)
+                : $this->priceLine($i, $item, $actor, $errors, $override, $ignoreInvoiceId, $seenAppointmentLines, $membershipPercent);
             if ($line !== null) {
                 $lines[] = $line;
             }
@@ -46,13 +53,68 @@ class InvoicePricingService
             throw ValidationException::withMessages($errors);
         }
 
+        $coupon = null;
+        $couponTotal = '0.00';
+        if (filled($couponCode)) {
+            // Memberships are never discounted by coupons.
+            $eligible = array_filter($lines, fn ($l) => $l['item_type'] !== 'membership');
+            $weights = array_map(fn ($l) => Money::sub($l['gross'], $l['discount_amount']), $eligible);
+            $result = $this->coupons->evaluate((string) $couponCode, $customer, Money::add(...array_values($weights)));
+            $coupon = $result['coupon'];
+            $couponTotal = $result['discount'];
+            foreach (Money::allocate($couponTotal, $weights) as $index => $share) {
+                $lines[$index]['coupon_discount'] = $share;
+            }
+        }
+
+        foreach ($lines as &$line) {
+            $net = Money::sub(Money::sub($line['gross'], $line['discount_amount']), $line['coupon_discount']);
+            $line['tax_amount'] = Money::percent($net, $line['tax_rate']);
+            $line['line_total'] = Money::add($net, $line['tax_amount']);
+        }
+        unset($line);
+
         return [
             'lines' => $lines,
             'subtotal' => Money::add(...array_column($lines, 'gross')),
             'discount_total' => Money::add(...array_column($lines, 'discount_amount')),
+            'coupon_discount_total' => $couponTotal,
             'tax_total' => Money::add(...array_column($lines, 'tax_amount')),
             'total' => Money::add(...array_column($lines, 'line_total')),
             'discount_override' => $override,
+            'coupon' => $coupon,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, string>  $errors
+     * @return array<string, mixed>|null
+     */
+    private function priceMembership(int $i, array $item, ?Customer $customer, array &$errors, int &$membershipItems): ?array
+    {
+        $plan = MembershipPlan::find($item['membership_plan_id']);
+        if (! $plan || ! $plan->is_active) {
+            $errors["items.$i.membership_plan_id"] = 'Choose an active membership plan.';
+
+            return null;
+        }
+        if (! $customer) {
+            $errors["items.$i.membership_plan_id"] = 'Choose a customer before selling a membership.';
+
+            return null;
+        }
+        if (++$membershipItems > 1) {
+            $errors["items.$i.membership_plan_id"] = 'Only one membership can be sold per invoice.';
+
+            return null;
+        }
+
+        return [
+            'item_type' => 'membership', 'service_id' => null, 'product_id' => null, 'membership_plan_id' => $plan->id, 'appointment_service_id' => null, 'employee_id' => null,
+            'description' => 'Membership: '.$plan->name, 'quantity' => 1, 'unit_price' => (string) $plan->price, 'gross' => (string) $plan->price,
+            'discount_type' => 'none', 'discount_source' => null, 'discount_value' => '0.00', 'discount_amount' => '0.00', 'coupon_discount' => '0.00',
+            'tax_rate' => '0.00', 'tax_amount' => '0.00', 'line_total' => (string) $plan->price, 'sort_order' => $i,
         ];
     }
 
@@ -62,7 +124,7 @@ class InvoicePricingService
      * @param  array<int, bool>  $seenAppointmentLines
      * @return array<string, mixed>|null
      */
-    private function priceLine(int $i, array $item, User $actor, array &$errors, bool &$override, ?int $ignoreInvoiceId, array &$seenAppointmentLines): ?array
+    private function priceLine(int $i, array $item, User $actor, array &$errors, bool &$override, ?int $ignoreInvoiceId, array &$seenAppointmentLines, string $membershipPercent = '0'): ?array
     {
         $quantity = (int) ($item['quantity'] ?? 1);
         $employeeId = ($item['employee_id'] ?? null) ?: null;
@@ -136,13 +198,20 @@ class InvoicePricingService
         if (isset($errors["items.$i.discount_value"])) {
             return null;
         }
-        $net = Money::sub($gross, $discountAmount);
-        $tax = Money::percent($net, $taxRate);
+        $discountSource = $discountType === 'none' ? null : 'manual';
+        // Members get their plan's discount automatically on lines without a manual discount.
+        if ($discountType === 'none' && Money::compare($membershipPercent, '0') > 0) {
+            $discountType = 'percent';
+            $discountValue = Money::fromMinor(Money::toMinor($membershipPercent));
+            $discountAmount = Money::percent($gross, $membershipPercent);
+            $discountSource = 'membership';
+        }
 
         return [
             'item_type' => $itemType,
             'service_id' => $serviceId,
             'product_id' => $productId,
+            'membership_plan_id' => null,
             'appointment_service_id' => $appointmentServiceId,
             'employee_id' => $employeeId,
             'description' => $description,
@@ -150,11 +219,13 @@ class InvoicePricingService
             'unit_price' => $unitPrice,
             'gross' => $gross,
             'discount_type' => $discountType,
+            'discount_source' => $discountSource,
             'discount_value' => $discountValue,
             'discount_amount' => $discountAmount,
+            'coupon_discount' => '0.00',
             'tax_rate' => $taxRate,
-            'tax_amount' => $tax,
-            'line_total' => Money::add($net, $tax),
+            'tax_amount' => '0.00',
+            'line_total' => '0.00',
             'sort_order' => $i,
         ];
     }

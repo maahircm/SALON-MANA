@@ -45,8 +45,10 @@ Decisions
 - [x] Valuation, cost visibility permission, inventory settings
 - [x] Verified on real MySQL 8 incl. parallel-process race tests (found and fixed double-booking + deadlocks)
 
-## Phase 5 — HR and CRM extensions
-Attendance, leave, commissions, loyalty, memberships, promotions, reminders.
+## Phase 5 — HR and CRM extensions  [DONE]
+- [x] Attendance, leave (availability-aware), commissions with snapshotted rules and proportional refund adjustments
+- [x] Loyalty points ledger, memberships, promotions/coupons (re-validated under lock), POS server preview, CRM segments / LTV
+- [x] Tests on SQLite and real MySQL 8; booking reminders and delivery are Phase 6
 ## Phase 6 — Reporting and administration
 Dashboard analytics, reports, CSV exports, settings UI, notifications.
 ## Phase 7 — Hardening and release

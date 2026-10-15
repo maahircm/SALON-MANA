@@ -49,6 +49,23 @@ return [
         'supplier_return_prefix' => 'SR-',
     ],
 
+    // Settings > Loyalty / Commissions / Attendance (stored in salon_settings; these are the defaults).
+    'loyalty' => [
+        'enabled' => true,
+        'earn_points_per_unit' => '1',     // points per 1.00 of net spend (after discounts, before tax)
+        'redeem_points_per_unit' => '100', // points needed per 1.00 of value when redeeming
+        'min_redeem_points' => 100,
+        'max_redeem_percent' => '100',     // max share of an invoice payable with points
+        'vip_threshold' => '500',          // lifetime value that marks a VIP customer segment
+    ],
+    'commission' => [
+        'accrue_on' => 'issue',            // issue | full_payment
+        'include_products' => false,       // commission on retail product lines
+    ],
+    'attendance' => [
+        'grace_minutes' => 10,
+    ],
+
     'password_min_length' => 10,
     'login_max_attempts' => 5,
     'login_decay_seconds' => 60,

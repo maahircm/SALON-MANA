@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 #[Fillable(['code', 'name', 'type', 'is_active', 'sort_order'])]
 class PaymentMethod extends Model
 {
-    public const TYPES = ['cash' => 'Cash', 'card' => 'Card', 'bank' => 'Bank transfer', 'mobile' => 'Mobile money', 'other' => 'Other'];
+    public const TYPES = ['cash' => 'Cash', 'card' => 'Card', 'bank' => 'Bank transfer', 'mobile' => 'Mobile money', 'loyalty' => 'Loyalty points', 'other' => 'Other'];
 
     protected function casts(): array
     {
@@ -18,5 +18,10 @@ class PaymentMethod extends Model
     public function isCash(): bool
     {
         return $this->type === 'cash';
+    }
+
+    public function isLoyalty(): bool
+    {
+        return $this->type === 'loyalty';
     }
 }

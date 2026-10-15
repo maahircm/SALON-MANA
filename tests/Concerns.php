@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\CashDrawerService;
 use App\Services\CheckoutService;
 use App\Services\InventoryService;
+use App\Services\SettingsService;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -131,5 +132,25 @@ trait Concerns
     protected function stockOf(Product $product): string
     {
         return (string) $product->fresh()->current_stock;
+    }
+
+    /**
+     * A staff user linked to an employee record (as stylists are in real life).
+     *
+     * @param  array<int, string>  $permissions
+     * @param  array<string, mixed>  $employeeAttributes
+     * @return array{0: User, 1: Employee}
+     */
+    protected function staffMember(array $permissions = [], array $employeeAttributes = []): array
+    {
+        $user = User::factory()->withPermissions(...($permissions ?: ['dashboard.view']))->create();
+        $employee = Employee::factory()->workingAllWeek()->create(['user_id' => $user->id] + $employeeAttributes);
+
+        return [$user, $employee];
+    }
+
+    protected function setting(string $key, mixed $value): void
+    {
+        app(SettingsService::class)->set($key, $value);
     }
 }

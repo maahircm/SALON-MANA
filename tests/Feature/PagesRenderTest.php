@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Coupon;
+use App\Models\MembershipPlan;
 use App\Models\ProductCategory;
+use App\Models\Promotion;
 use App\Models\Room;
 use App\Models\ServiceConsumable;
 use App\Models\ServicePackage;
@@ -108,5 +111,34 @@ class PagesRenderTest extends TestCase
         $plain = $this->actingAs(User::factory()->withPermissions('inventory.view')->create())->get('/dashboard');
         $plain->assertDontSee('Valuation')->assertDontSee('Purchase Orders')->assertDontSee('Stock Adjustments');
         $this->actingAs($this->stockKeeper('dashboard.view'))->get('/dashboard')->assertSee('Valuation')->assertSee('Purchase Orders')->assertSee('Stock Adjustments');
+    }
+
+    public function test_every_hr_and_loyalty_screen_renders_with_realistic_data(): void
+    {
+        $this->freezeSalonTime();
+        $admin = User::factory()->superAdmin()->create();
+        $cashier = $this->cashier();
+        $this->openDrawer($cashier);
+        $stylist = $this->stylist();
+        $customer = $this->customer();
+        $plan = MembershipPlan::create(['name' => 'Gold', 'price' => '50.00', 'duration_days' => 30, 'discount_percent' => '10.00', 'points_multiplier' => '2.00', 'is_active' => true]);
+        $promotion = Promotion::create(['name' => 'Autumn', 'discount_type' => 'percent', 'discount_value' => '10.00', 'min_purchase' => '0.00', 'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'is_active' => true]);
+        (new Coupon(['code' => 'AUTUMN', 'is_active' => true]))->forceFill(['promotion_id' => $promotion->id, 'used_count' => 0])->save();
+        $this->issueInvoice($cashier, [['service_id' => $this->service(60, '40.00')->id, 'quantity' => 1]], [$this->cashPayment('40.00')], ['customer_id' => $customer->id, 'employee_id' => $stylist->id]);
+        $stylist->leaveRequests()->create(['leave_type' => 'annual', 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-03', 'days' => 2, 'status' => 'pending', 'reason' => 'Trip']);
+
+        $urls = ['/attendance', '/attendance/summary', '/leave', '/commissions', '/commissions?employee='.$stylist->id, '/loyalty', '/loyalty/settings', "/loyalty/customers/{$customer->id}",
+            '/memberships', '/promotions', '/promotions/create', "/promotions/{$promotion->id}", "/promotions/{$promotion->id}/edit", '/settings/hr', '/pos',
+            '/customers?segment=vip', '/customers?segment=members', "/customers/{$customer->id}"];
+        foreach ($urls as $url) {
+            $this->assertNoNestedForms($this->actingAs($admin)->get($url)->assertOk()->getContent(), $url);
+        }
+        $html = $this->actingAs($admin)->get('/dashboard')->getContent();
+        preg_match_all('/class="nav-item[^"]*" href="([^"]+)"/', $html, $links);
+        foreach ($links[1] as $href) {
+            $this->actingAs($admin)->get($href)->assertOk();
+        }
+        $this->assertStringContainsString('Commissions', $html);
+        $this->assertNotNull($plan->id);
     }
 }

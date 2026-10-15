@@ -44,7 +44,10 @@ return [
             'employees.schedule' => 'Manage schedules and shifts',
             'employees.attendance' => 'Manage attendance',
             'employees.leave' => 'Approve leave requests',
-            'employees.commissions' => 'Manage commissions',
+            'employees.commissions' => 'View / adjust all commission statements',
+            'commissions.own' => 'View own commission statement',
+            'attendance.self' => 'Clock in / out for self',
+            'leave.request' => 'Request own leave',
         ],
         'Point of Sale' => [
             'pos.use' => 'Use POS checkout',
@@ -106,18 +109,18 @@ return [
         'receptionist' => ['name' => 'Receptionist', 'permissions' => [
             'dashboard.view', 'customers.view', 'customers.create', 'customers.update', 'services.view',
             'appointments.view', 'appointments.all', 'appointments.create', 'appointments.update', 'appointments.status',
-            'appointments.cancel', 'employees.view', 'loyalty.view',
+            'appointments.cancel', 'employees.view', 'loyalty.view', 'attendance.self', 'leave.request',
         ]],
         'stylist' => ['name' => 'Stylist / Beautician', 'permissions' => [
             'dashboard.view', 'customers.view', 'customers.sensitive', 'services.view',
-            'appointments.view', 'appointments.status',
+            'appointments.view', 'appointments.status', 'attendance.self', 'leave.request', 'commissions.own',
         ]],
         'cashier' => ['name' => 'Cashier', 'permissions' => [
             'dashboard.view', 'customers.view', 'services.view', 'appointments.view',
-            'pos.use', 'pos.invoices', 'pos.drawer', 'inventory.view', 'loyalty.view', 'appointments.all',
+            'pos.use', 'pos.invoices', 'pos.drawer', 'inventory.view', 'loyalty.view', 'appointments.all', 'attendance.self', 'leave.request',
         ]],
         'inventory-manager' => ['name' => 'Inventory Manager', 'permissions' => [
-            'dashboard.view', 'inventory.*', 'reports.view',
+            'dashboard.view', 'inventory.*', 'reports.view', 'attendance.self', 'leave.request',
         ]],
         'accountant' => ['name' => 'Accountant', 'permissions' => [
             'dashboard.view', 'dashboard.financials', 'pos.invoices', 'expenses.*', 'finance.view',

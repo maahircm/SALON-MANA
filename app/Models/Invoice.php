@@ -27,6 +27,7 @@ class Invoice extends Model
         return [
             'subtotal' => 'decimal:2',
             'discount_total' => 'decimal:2',
+            'coupon_discount_total' => 'decimal:2',
             'tax_total' => 'decimal:2',
             'total' => 'decimal:2',
             'amount_paid' => 'decimal:2',
@@ -46,7 +47,7 @@ class Invoice extends Model
         });
         static::updating(function (self $invoice): void {
             if ($invoice->getOriginal('status') !== self::STATUS_DRAFT) {
-                $frozen = ['customer_id', 'appointment_id', 'currency', 'subtotal', 'discount_total', 'tax_total', 'total', 'invoice_number', 'issued_at', 'issued_by', 'created_by', 'checkout_key'];
+                $frozen = ['customer_id', 'appointment_id', 'coupon_id', 'currency', 'subtotal', 'discount_total', 'coupon_discount_total', 'tax_total', 'total', 'invoice_number', 'issued_at', 'issued_by', 'created_by', 'checkout_key'];
                 if ($invoice->isDirty($frozen)) {
                     throw new LogicException('Issued invoice amounts and identity cannot be changed.');
                 }
@@ -62,6 +63,11 @@ class Invoice extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class);
     }
 
     public function items(): HasMany

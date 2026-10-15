@@ -71,6 +71,39 @@ final class Money
         return self::fromMinor(intdiv(abs($minor) * 2 + $denominator, $denominator * 2) * ($minor < 0 ? -1 : 1));
     }
 
+    /**
+     * Split an amount across weights so the parts add up exactly (largest-remainder method).
+     *
+     * @param  array<int|string, string|int|float>  $weights  e.g. line values; keys are preserved
+     * @return array<int|string, string>
+     */
+    public static function allocate(string|int|float $amount, array $weights): array
+    {
+        $total = self::toMinor($amount);
+        $w = array_map(fn ($x) => max(0, self::toMinor($x)), $weights);
+        $sum = array_sum($w);
+        if ($sum === 0 || $total === 0) {
+            return array_map(fn () => '0.00', $weights);
+        }
+        $parts = [];
+        $remainders = [];
+        foreach ($w as $key => $weight) {
+            $parts[$key] = intdiv($total * $weight, $sum);
+            $remainders[$key] = ($total * $weight) % $sum;
+        }
+        $left = $total - array_sum($parts);
+        arsort($remainders);
+        foreach (array_keys($remainders) as $key) {
+            if ($left <= 0) {
+                break;
+            }
+            $parts[$key]++;
+            $left--;
+        }
+
+        return array_map([self::class, 'fromMinor'], $parts);
+    }
+
     public static function compare(string|int|float|null $a, string|int|float|null $b): int
     {
         return self::toMinor($a) <=> self::toMinor($b);

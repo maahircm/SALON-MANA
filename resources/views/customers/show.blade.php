@@ -34,7 +34,11 @@
         <div class="mt-2"><a class="small" href="{{ route('invoices.index', ['customer_id' => $customer->id]) }}">All invoices</a></div>
     </div></div>
     @endif
-    <div class="card mb-3"><div class="card-header">Loyalty</div><div class="card-body text-muted small">Loyalty points and membership appear here once the loyalty module is enabled.</div></div>
+    @if ($loyalty)
+    <div class="card mb-3"><div class="card-header d-flex justify-content-between">Loyalty &amp; membership <a class="small" href="{{ route('loyalty.show', $customer) }}">Ledger</a></div><div class="card-body">
+        <div class="fs-4">{{ number_format($loyalty['account']?->balance ?? 0) }} <small class="fs-6 text-muted">points</small></div>
+        @if ($loyalty['membership'])<div class="mt-2"><span class="badge text-bg-warning">{{ $loyalty['membership']->plan->name }}</span> <span class="small text-muted">until {{ $loyalty['membership']->ends_on->format('d M Y') }} · {{ rtrim(rtrim((string) $loyalty['membership']->discount_percent, '0'), '.') }}% off</span></div>@else<div class="small text-muted mt-2">No active membership.</div>@endif
+    </div></div>@endif
     @can('archive', $customer) @if (! $customer->anonymized_at)
     <div class="card border-danger-subtle"><div class="card-header text-danger">Privacy erasure</div><div class="card-body">
         <p class="small text-muted">Permanently removes this customer's personal data (name, contact details, notes, preferences) while keeping appointment and financial records.</p>

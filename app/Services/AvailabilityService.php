@@ -38,7 +38,7 @@ class AvailabilityService
     public function workingWindows(Employee $employee, CarbonInterface $date): array
     {
         $business = $this->businessWindow($date);
-        if (! $business) {
+        if (! $business || $employee->isOnLeave($date)) {
             return [];
         }
         $day = CarbonImmutable::parse($date->toDateString());

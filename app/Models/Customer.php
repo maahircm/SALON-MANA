@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['name', 'phone', 'email', 'date_of_birth', 'gender', 'address', 'notes', 'preferred_employee_id', 'status', 'marketing_consent'])]
@@ -55,6 +56,22 @@ class Customer extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    public function loyaltyAccount(): HasOne
+    {
+        return $this->hasOne(LoyaltyAccount::class);
+    }
+
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(CustomerMembership::class);
+    }
+
+    /** The membership that gives benefits today, if any. */
+    public function activeMembership(): ?CustomerMembership
+    {
+        return $this->memberships()->where('status', 'active')->whereDate('starts_on', '<=', today())->whereDate('ends_on', '>=', today())->latest('ends_on')->first();
     }
 
     public function invoices(): HasMany

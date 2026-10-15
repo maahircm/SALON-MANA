@@ -1,23 +1,30 @@
 <?php
 
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\BookingSettingsController;
 use App\Http\Controllers\CashDrawerController;
+use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
+use App\Http\Controllers\HrSettingsController;
 use App\Http\Controllers\InventorySettingsController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\LeaveRequestController;
+use App\Http\Controllers\LoyaltyController;
+use App\Http\Controllers\MembershipController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosSettingsController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
@@ -123,6 +130,7 @@ Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
 Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
     Route::get('pos', [PosController::class, 'index'])->name('pos.index');
     Route::post('pos', [PosController::class, 'store'])->middleware('throttle:60,1')->name('pos.store');
+    Route::post('pos/preview', [PosController::class, 'preview'])->middleware('throttle:240,1')->name('pos.preview');
     Route::delete('pos/drafts/{invoice}', [PosController::class, 'destroyDraft'])->name('pos.drafts.destroy');
 
     Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
@@ -174,4 +182,42 @@ Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
 
     Route::get('settings/inventory', [InventorySettingsController::class, 'edit'])->name('settings.inventory');
     Route::put('settings/inventory', [InventorySettingsController::class, 'update'])->name('settings.inventory.update');
+});
+
+// ---- Phase 5: HR and CRM extensions ----
+Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
+    Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::get('attendance/summary', [AttendanceController::class, 'summary'])->name('attendance.summary');
+    Route::post('attendance/clock-in', [AttendanceController::class, 'clockIn'])->middleware('throttle:sensitive')->name('attendance.clock-in');
+    Route::post('attendance/clock-out', [AttendanceController::class, 'clockOut'])->middleware('throttle:sensitive')->name('attendance.clock-out');
+    Route::post('attendance', [AttendanceController::class, 'store'])->name('attendance.store');
+
+    Route::get('leave', [LeaveRequestController::class, 'index'])->name('leave.index');
+    Route::post('leave', [LeaveRequestController::class, 'store'])->name('leave.store');
+    Route::post('leave/{leave}/approve', [LeaveRequestController::class, 'approve'])->name('leave.approve');
+    Route::post('leave/{leave}/reject', [LeaveRequestController::class, 'reject'])->name('leave.reject');
+    Route::post('leave/{leave}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave.cancel');
+
+    Route::get('commissions', [CommissionController::class, 'index'])->name('commissions.index');
+    Route::get('commissions/export', [CommissionController::class, 'export'])->middleware('throttle:sensitive')->name('commissions.export');
+    Route::post('commissions/adjustments', [CommissionController::class, 'adjust'])->middleware('throttle:sensitive')->name('commissions.adjust');
+    Route::get('my-commissions', [CommissionController::class, 'mine'])->name('commissions.mine');
+
+    Route::get('loyalty', [LoyaltyController::class, 'index'])->name('loyalty.index');
+    Route::get('loyalty/settings', [LoyaltyController::class, 'settings'])->name('loyalty.settings');
+    Route::put('loyalty/settings', [LoyaltyController::class, 'updateSettings'])->name('loyalty.settings.update');
+    Route::get('loyalty/customers/{customer}', [LoyaltyController::class, 'show'])->name('loyalty.show');
+    Route::post('loyalty/customers/{customer}/adjust', [LoyaltyController::class, 'adjust'])->middleware('throttle:sensitive')->name('loyalty.adjust');
+
+    Route::get('memberships', [MembershipController::class, 'index'])->name('memberships.index');
+    Route::post('memberships/plans', [MembershipController::class, 'storePlan'])->name('memberships.plans.store');
+    Route::put('memberships/plans/{plan}', [MembershipController::class, 'updatePlan'])->name('memberships.plans.update');
+    Route::post('memberships/{membership}/cancel', [MembershipController::class, 'cancel'])->name('memberships.cancel');
+
+    Route::post('promotions/{promotion}/coupons', [PromotionController::class, 'storeCoupon'])->name('promotions.coupons.store');
+    Route::post('coupons/{coupon}/toggle', [PromotionController::class, 'toggleCoupon'])->name('coupons.toggle');
+    Route::resource('promotions', PromotionController::class)->except(['destroy']);
+
+    Route::get('settings/hr', [HrSettingsController::class, 'edit'])->name('settings.hr');
+    Route::put('settings/hr', [HrSettingsController::class, 'update'])->name('settings.hr.update');
 });

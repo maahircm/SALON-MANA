@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Database\Factories\EmployeeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -54,6 +55,27 @@ class Employee extends Model
     public function shifts(): HasMany
     {
         return $this->hasMany(EmployeeShift::class)->orderBy('shift_date');
+    }
+
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(EmployeeAttendance::class);
+    }
+
+    public function leaveRequests(): HasMany
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(Commission::class);
+    }
+
+    /** True when approved leave covers the given date. */
+    public function isOnLeave(CarbonInterface $date): bool
+    {
+        return $this->leaveRequests()->where('status', 'approved')->whereDate('starts_on', '<=', $date->toDateString())->whereDate('ends_on', '>=', $date->toDateString())->exists();
     }
 
     public function appointmentServices(): HasMany

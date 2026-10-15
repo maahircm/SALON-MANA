@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\Skill;
 use App\Services\AuditLogger;
+use App\Services\SettingsService;
 use App\Support\Atomic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,7 +33,7 @@ class ServiceController extends Controller
     {
         $this->authorize('services.manage');
 
-        return view('services.form', ['service' => new Service(['duration_minutes' => 60, 'tax_rate' => 0, 'is_active' => true]), ...$this->lookups()]);
+        return view('services.form', ['service' => new Service(['duration_minutes' => 60, 'tax_rate' => app(SettingsService::class)->get('tax.default_rate', '0.00'), 'is_active' => true]), ...$this->lookups()]);
     }
 
     public function store(ServiceRequest $request)

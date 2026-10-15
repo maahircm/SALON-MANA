@@ -41,7 +41,7 @@ class ProductController extends Controller
     {
         $this->authorize('inventory.manage');
 
-        return view('inventory.products.form', ['product' => new Product(['unit' => 'pc', 'is_sellable' => true, 'is_active' => true, 'selling_price' => '0.00', 'tax_rate' => '0.00', 'reorder_level' => '0.000']), ...$this->lookups()]);
+        return view('inventory.products.form', ['product' => new Product(['unit' => 'pc', 'is_sellable' => true, 'is_active' => true, 'selling_price' => '0.00', 'tax_rate' => app(SettingsService::class)->get('tax.default_rate', '0.00'), 'reorder_level' => '0.000']), ...$this->lookups()]);
     }
 
     public function store(ProductRequest $request): RedirectResponse

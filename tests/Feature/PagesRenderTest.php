@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Coupon;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\MembershipPlan;
+use App\Models\NotificationLog;
 use App\Models\ProductCategory;
 use App\Models\Promotion;
 use App\Models\Room;
@@ -12,6 +15,7 @@ use App\Models\ServicePackage;
 use App\Models\Skill;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\UserNotification;
 use App\Services\AppointmentBookingService;
 use App\Services\PurchasingService;
 use App\Services\StockAdjustmentService;
@@ -140,5 +144,34 @@ class PagesRenderTest extends TestCase
         }
         $this->assertStringContainsString('Commissions', $html);
         $this->assertNotNull($plan->id);
+    }
+
+    public function test_every_finance_reporting_and_settings_screen_renders_with_realistic_data(): void
+    {
+        $this->freezeSalonTime();
+        $admin = User::factory()->superAdmin()->create();
+        $cashier = $this->cashier();
+        $this->openDrawer($cashier);
+        $customer = $this->customer(['email' => 'c@example.test']);
+        $invoice = $this->issueInvoice($cashier, [['service_id' => $this->service(60, '40.00')->id, 'quantity' => 1]], [$this->cashPayment('15.00')], ['customer_id' => $customer->id]);
+        $expense = (new Expense(['expense_category_id' => ExpenseCategory::first()->id, 'description' => 'Rent', 'amount' => '20.00', 'expense_date' => today()]))->forceFill(['expense_number' => 'EXP-P1', 'status' => Expense::PENDING, 'created_by' => $admin->id]);
+        $expense->save();
+        $notification = UserNotification::create(['user_id' => $admin->id, 'type' => 'low_stock', 'title' => 'Low stock', 'body' => 'Body']);
+        NotificationLog::create(['channel' => 'email', 'type' => 'booking_confirmation', 'recipient_type' => 'customer', 'recipient_id' => $customer->id, 'destination' => 'c@example.test', 'subject' => 'S', 'body' => 'B', 'status' => 'failed', 'last_error' => 'boom', 'dedupe_key' => 'k1']);
+
+        $urls = ['/dashboard', '/dashboard?range=year', '/expenses', '/expenses?status=pending&payment=unpaid', '/expenses/create', "/expenses/{$expense->id}", "/expenses/{$expense->id}/edit", '/expenses/categories',
+            '/finance', '/finance?range=month', '/reports', '/notifications', '/notification-logs', '/notification-logs?status=failed&type=booking_confirmation', '/settings/general', '/settings/notifications', "/invoices/{$invoice->id}/receipt"];
+        foreach ($urls as $url) {
+            $this->assertNoNestedForms($this->actingAs($admin)->get($url)->assertOk()->getContent(), $url);
+        }
+        $html = $this->actingAs($admin)->get('/dashboard')->getContent();
+        preg_match_all('/class="nav-item[^"]*" href="([^"]+)"/', $html, $links);
+        foreach ($links[1] as $href) {
+            $this->actingAs($admin)->get($href)->assertOk();
+        }
+        foreach (['Expenses', 'Financial Summary', 'Reports', 'General Settings', 'Message Delivery Log'] as $label) {
+            $this->assertStringContainsString($label, $html);
+        }
+        $this->assertNotNull($notification->id);
     }
 }

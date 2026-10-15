@@ -7,6 +7,8 @@ use App\Models\Appointment;
 use App\Models\AppointmentStatusHistory;
 use App\Models\User;
 use App\Support\Atomic;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /** The only place an appointment's status changes. Validates the transition and writes history + audit. */
@@ -51,6 +53,15 @@ class AppointmentStatusService
             $appointment->save();
 
             $this->record($appointment, $from, $to, $actor, $reason);
+            if ($to === AppointmentStatus::Cancelled) {
+                DB::afterCommit(function () use ($appointment): void {
+                    try {
+                        app(NotificationService::class)->bookingCancellation($appointment->fresh());
+                    } catch (\Throwable $e) {
+                        Log::warning('Cancellation notification failed', ['error' => $e->getMessage()]);
+                    }
+                });
+            }
             $this->audit->log('appointment.status_changed', $appointment, ['status' => $from->value], ['status' => $to->value,
                 'late_cancellation' => $appointment->is_late_cancellation], $reason);
 

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StampsCreatedAt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CouponRedemption extends Model
 {
+    use StampsCreatedAt;
+
     public $timestamps = false;
 
     protected $guarded = [];

@@ -56,7 +56,7 @@ class InvoiceController extends Controller
         if ($isDuplicate) {
             $audit->log('invoice.receipt_reprinted', $invoice, null, ['invoice_number' => $invoice->invoice_number, 'print_count' => $invoice->print_count]);
         }
-        $invoice->load('customer', 'items', 'payments.method', 'refunds', 'issuer:id,name');
+        $invoice->load('customer', 'coupon', 'items', 'payments.method', 'refunds', 'issuer:id,name');
 
         return view('invoices.receipt', ['invoice' => $invoice, 'isDuplicate' => $isDuplicate]);
     }

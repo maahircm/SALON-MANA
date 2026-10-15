@@ -7,6 +7,24 @@ return [
     'date_format' => env('SALON_DATE_FORMAT', 'Y-m-d'),
     'time_format' => env('SALON_TIME_FORMAT', 'H:i'),
 
+    // Settings > General (stored in salon_settings; env values above are the defaults for name, currency, formats).
+    'general' => [
+        'phone' => '', 'email' => '', 'address' => '', 'logo_path' => null,
+    ],
+    'tax' => ['label' => 'Tax', 'number' => '', 'default_rate' => '0.00'],
+    'receipt' => ['paper' => '80mm', 'show_logo' => true, 'show_tax_number' => true, 'show_cashier' => true],
+    'finance' => ['expense_self_approval' => false, 'expense_prefix' => 'EXP-'],
+
+    // Settings > Notifications (stored in salon_settings as notifications.channels.* / notifications.events.* / flat keys).
+    'notifications' => [
+        'channels' => ['email' => true, 'sms' => false, 'in_app' => true],
+        'events' => ['booking_confirmation' => true, 'booking_cancellation' => true, 'appointment_reminder' => true, 'low_stock' => true, 'payment_reminder' => false, 'birthday' => false],
+        'payment_reminder_after_days' => 3,
+        'payment_reminder_repeat_days' => 7,
+        'payment_reminder_max' => 3,
+        'sms_driver' => env('SMS_DRIVER', 'log'),
+    ],
+
     // Defaults for settings editable under Settings > Booking & hours (stored in salon_settings).
     'booking' => [
         // weekday (0 = Sunday ... 6 = Saturday) => [open, close, closed]

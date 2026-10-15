@@ -11,6 +11,8 @@ use App\Models\Service;
 use App\Models\User;
 use App\Support\Atomic;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -62,7 +64,23 @@ class AppointmentBookingService
                 'lines' => $this->snapshot($lines),
             ]);
 
+            if (! $walkIn) {
+                $this->afterCommitNotify(fn (NotificationService $n) => $n->bookingConfirmation($appointment->fresh()));
+            }
+
             return $appointment->refresh()->load('lines');
+        });
+    }
+
+    /** Messages are sent after the booking is committed, and a messaging problem never fails the booking. */
+    private function afterCommitNotify(callable $send): void
+    {
+        DB::afterCommit(function () use ($send): void {
+            try {
+                $send(app(NotificationService::class));
+            } catch (\Throwable $e) {
+                Log::warning('Booking notification failed', ['error' => $e->getMessage()]);
+            }
         });
     }
 

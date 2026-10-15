@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StampsCreatedAt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -9,6 +10,8 @@ use LogicException;
 /** One immutable line of the stock ledger. Corrections are new, opposite movements. */
 class StockMovement extends Model
 {
+    use StampsCreatedAt;
+
     public const PURCHASE_RECEIPT = 'purchase_receipt';
 
     public const SALE = 'sale';

@@ -26,6 +26,11 @@
             ['supplier-returns.index', 'Supplier Returns', 'bi-arrow-return-left', 'inventory.purchasing'],
             ['inventory.valuation', 'Valuation', 'bi-cash-stack', 'inventory.costs'],
         ],
+        'Finance & Reports' => [
+            ['expenses.index', 'Expenses', 'bi-wallet2', 'expenses.view'],
+            ['finance.summary', 'Financial Summary', 'bi-bar-chart-line', 'finance.view'],
+            ['reports.index', 'Reports', 'bi-file-earmark-bar-graph', 'reports.view'],
+        ],
         'Customers & Loyalty' => [
             ['loyalty.index', 'Loyalty', 'bi-stars', 'loyalty.view'],
             ['memberships.index', 'Memberships', 'bi-award', 'loyalty.view'],
@@ -44,6 +49,9 @@
         'Administration' => [
             ['users.index', 'Users', 'bi-people', 'users.view'],
             ['roles.index', 'Roles & Permissions', 'bi-shield-lock', 'roles.manage'],
+            ['settings.general', 'General Settings', 'bi-building-gear', 'settings.manage'],
+            ['notification-settings.edit', 'Notification Settings', 'bi-bell', 'notifications.manage'],
+            ['notification-logs.index', 'Message Delivery Log', 'bi-envelope-check', 'notifications.manage'],
             ['settings.booking', 'Booking Settings', 'bi-gear', 'settings.manage'],
             ['settings.pos', 'POS Settings', 'bi-sliders', 'settings.manage'],
             ['settings.inventory', 'Inventory Settings', 'bi-boxes', 'settings.manage'],
@@ -69,6 +77,14 @@
     <header class="sm-topbar">
         <button class="btn btn-light d-lg-none" data-toggle-sidebar aria-label="Toggle navigation"><i class="bi bi-list"></i></button>
         <h1 class="h5 mb-0 flex-grow-1">@yield('title', 'Dashboard')</h1>
+        <div class="dropdown">
+            <button class="btn btn-light position-relative" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications"><i class="bi bi-bell"></i>@if ($unreadCount > 0)<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>@endif</button>
+            <div class="dropdown-menu dropdown-menu-end p-0" style="width:340px">
+                @forelse ($recentNotifications as $n)<form method="post" action="{{ route('notifications.read', $n) }}">@csrf<button class="dropdown-item text-wrap border-bottom py-2 {{ $n->isUnread() ? 'fw-semibold' : 'text-muted' }}"><div>{{ $n->title }}</div><div class="small text-muted text-truncate">{{ \Illuminate\Support\Str::limit($n->body, 70) }}</div></button></form>
+                @empty<div class="p-3 text-muted small">No notifications.</div>@endforelse
+                <a class="dropdown-item text-center small py-2" href="{{ route('notifications.index') }}">View all</a>
+            </div>
+        </div>
         <div class="dropdown">
             <button class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-person-circle"></i> {{ auth()->user()->name }}</button>
             <ul class="dropdown-menu dropdown-menu-end">

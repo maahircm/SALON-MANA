@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StampsCreatedAt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -9,6 +10,8 @@ use LogicException;
 /** One immutable line of the points ledger. */
 class LoyaltyTransaction extends Model
 {
+    use StampsCreatedAt;
+
     public const LABELS = ['earn' => 'Points earned', 'redeem' => 'Points redeemed', 'earn_reversal' => 'Earned points reversed', 'redeem_refund' => 'Redeemed points returned', 'adjustment' => 'Manual adjustment'];
 
     public $timestamps = false;

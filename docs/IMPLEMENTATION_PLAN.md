@@ -49,7 +49,11 @@ Decisions
 - [x] Attendance, leave (availability-aware), commissions with snapshotted rules and proportional refund adjustments
 - [x] Loyalty points ledger, memberships, promotions/coupons (re-validated under lock), POS server preview, CRM segments / LTV
 - [x] Tests on SQLite and real MySQL 8; booking reminders and delivery are Phase 6
-## Phase 6 — Reporting and administration
-Dashboard analytics, reports, CSV exports, settings UI, notifications.
+## Phase 6 — Reporting and administration  [DONE]
+- [x] Dashboard analytics (permission-aware, date range, Chart.js), finance summary, 18 reports with filters / pagination / print / CSV
+- [x] Expenses with approval workflow and private receipts
+- [x] General settings applied at runtime (profile, logo, timezone, currency, formats, tax, receipt), notification settings
+- [x] Notifications: in-app, email, SMS abstraction (log driver only), queued jobs with retry, delivery log, dedupe, scheduled automations
+- [ ] Needs external services to be real: SMTP credentials, an SMS gateway driver
 ## Phase 7 — Hardening and release
 Full tests, security/perf review, backup/restore verification, deployment docs, acceptance report.

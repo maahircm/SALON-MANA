@@ -12,12 +12,19 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\GeneralSettingsController;
 use App\Http\Controllers\HrSettingsController;
 use App\Http\Controllers\InventorySettingsController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LoyaltyController;
 use App\Http\Controllers\MembershipController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationLogController;
+use App\Http\Controllers\NotificationSettingsController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosSettingsController;
@@ -26,6 +33,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PurchaseOrderController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\ServiceAddonController;
@@ -220,4 +228,32 @@ Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
 
     Route::get('settings/hr', [HrSettingsController::class, 'edit'])->name('settings.hr');
     Route::put('settings/hr', [HrSettingsController::class, 'update'])->name('settings.hr.update');
+
+    Route::get('expenses/categories', [ExpenseCategoryController::class, 'index'])->name('expense-categories.index');
+    Route::post('expenses/categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+    Route::put('expenses/categories/{category}', [ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
+    Route::get('expenses/{expense}/receipt', [ExpenseController::class, 'receipt'])->middleware('throttle:sensitive')->name('expenses.receipt');
+    Route::post('expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
+    Route::post('expenses/{expense}/reject', [ExpenseController::class, 'reject'])->name('expenses.reject');
+    Route::post('expenses/{expense}/cancel', [ExpenseController::class, 'cancel'])->name('expenses.cancel');
+    Route::post('expenses/{expense}/pay', [ExpenseController::class, 'pay'])->name('expenses.pay');
+    Route::resource('expenses', ExpenseController::class)->except(['destroy']);
+
+    Route::get('finance', [FinanceController::class, 'summary'])->name('finance.summary');
+    Route::get('finance/export', [FinanceController::class, 'export'])->middleware('throttle:sensitive')->name('finance.export');
+
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/{report}/export', [ReportController::class, 'export'])->middleware('throttle:sensitive')->name('reports.export');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
+    Route::get('notification-logs', [NotificationLogController::class, 'index'])->name('notification-logs.index');
+    Route::post('notification-logs/{log}/retry', [NotificationLogController::class, 'retry'])->middleware('throttle:sensitive')->name('notification-logs.retry');
+    Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('notification-settings.edit');
+    Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('notification-settings.update');
+    Route::get('settings/general', [GeneralSettingsController::class, 'edit'])->name('settings.general');
+    Route::put('settings/general', [GeneralSettingsController::class, 'update'])->name('settings.general.update');
+    Route::delete('settings/general/logo', [GeneralSettingsController::class, 'removeLogo'])->name('settings.general.logo.remove');
 });

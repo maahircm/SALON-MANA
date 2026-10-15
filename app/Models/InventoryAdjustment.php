@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StampsCreatedAt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
 class InventoryAdjustment extends Model
 {
+    use StampsCreatedAt;
+
     /** @var array<string, string> */
     public const KINDS = ['count_correction' => 'Stock count correction', 'damaged' => 'Damaged', 'expired' => 'Expired', 'found' => 'Found / unrecorded stock', 'other' => 'Other loss'];
 

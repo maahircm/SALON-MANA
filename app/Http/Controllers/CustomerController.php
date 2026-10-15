@@ -7,7 +7,9 @@ use App\Http\Requests\CustomerRequest;
 use App\Models\Customer;
 use App\Models\CustomerPreference;
 use App\Models\Employee;
+use App\Models\Invoice;
 use App\Services\AuditLogger;
+use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -67,9 +69,19 @@ class CustomerController extends Controller
         $canSensitive = $request->user()->can('customers.sensitive');
         $preferences = $customer->preferences()->when(! $canSensitive, fn ($q) => $q->where('is_sensitive', false))->latest()->get();
         $appointments = $customer->appointments()->with('lines.service:id,name')->latest('start_at')->limit(25)->get();
-        // Invoices / purchases / loyalty are attached by the POS and loyalty phases.
+        $billing = null;
+        if ($request->user()->can('pos.invoices')) {
+            $issued = $customer->invoices()->where('status', Invoice::STATUS_ISSUED);
+            $billing = [
+                'recent' => (clone $issued)->latest('id')->limit(10)->get(),
+                'outstanding' => Money::add(...(clone $issued)->whereColumn('amount_paid', '<', 'total')->get(['total', 'amount_paid'])->map(fn ($i) => Money::sub((string) $i->total, (string) $i->amount_paid))->all()),
+                'lifetime_paid' => Money::sub(Money::add(...(clone $issued)->pluck('amount_paid')->all()), Money::add(...(clone $issued)->pluck('refunded_total')->all())),
+                'invoice_count' => (clone $issued)->count(),
+            ];
+        }
+        // Loyalty points and memberships are attached by the loyalty phase.
 
-        return view('customers.show', compact('customer', 'preferences', 'appointments', 'canSensitive'));
+        return view('customers.show', compact('customer', 'preferences', 'appointments', 'canSensitive', 'billing'));
     }
 
     public function edit(Customer $customer)

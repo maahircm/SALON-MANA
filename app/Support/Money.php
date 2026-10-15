@@ -53,6 +53,24 @@ final class Money
         return self::fromMinor($num < 0 ? -$minor : $minor);
     }
 
+    /**
+     * Multiply an amount by a whole quantity.
+     */
+    public static function times(string|int|float|null $amount, int $quantity): string
+    {
+        return self::fromMinor(self::toMinor($amount) * $quantity);
+    }
+
+    /**
+     * Share of an amount: round(amount * numerator / denominator), half up, to the cent.
+     */
+    public static function share(string|int|float|null $amount, int $numerator, int $denominator): string
+    {
+        $minor = self::toMinor($amount) * $numerator;
+
+        return self::fromMinor(intdiv(abs($minor) * 2 + $denominator, $denominator * 2) * ($minor < 0 ? -1 : 1));
+    }
+
     public static function compare(string|int|float|null $a, string|int|float|null $b): int
     {
         return self::toMinor($a) <=> self::toMinor($b);

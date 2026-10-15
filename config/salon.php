@@ -28,6 +28,18 @@ return [
         'reminder_hours_before' => 24,
     ],
 
+    // Defaults for settings editable under Settings > POS (stored in salon_settings).
+    'pos' => [
+        'invoice_prefix' => 'INV-',
+        'refund_prefix' => 'RF-',
+        'number_padding' => 6,
+        'max_discount_percent' => '10',
+        'allow_credit_sales' => true,
+        'require_open_drawer' => true,
+        'receipt_header' => '',
+        'receipt_footer' => 'Thank you for visiting!',
+    ],
+
     'password_min_length' => 10,
     'login_max_attempts' => 5,
     'login_decay_seconds' => 60,

@@ -10,6 +10,13 @@
             ['services.index', 'Services', 'bi-scissors', 'services.view'],
             ['packages.index', 'Packages', 'bi-box2-heart', 'services.view'],
         ],
+        'Sales' => [
+            ['pos.index', 'Point of Sale', 'bi-cart-check', 'pos.use'],
+            ['invoices.index', 'Invoices', 'bi-receipt', 'pos.invoices'],
+            ['payments.index', 'Payments & Refunds', 'bi-credit-card', 'pos.invoices'],
+            ['cash.index', 'Cash Drawer', 'bi-cash-stack', 'pos.drawer'],
+            ['cash.daily', 'Daily Summary', 'bi-calendar-check', 'pos.close'],
+        ],
         'Team' => [
             ['employees.index', 'Employees', 'bi-person-badge', 'employees.view'],
             ['schedules.index', 'Staff Schedule', 'bi-calendar3', 'employees.view'],
@@ -19,6 +26,7 @@
             ['users.index', 'Users', 'bi-people', 'users.view'],
             ['roles.index', 'Roles & Permissions', 'bi-shield-lock', 'roles.manage'],
             ['settings.booking', 'Booking Settings', 'bi-gear', 'settings.manage'],
+            ['settings.pos', 'POS Settings', 'bi-sliders', 'settings.manage'],
             ['audit.index', 'Audit Log', 'bi-journal-text', 'audit.view'],
         ],
     ];
@@ -31,7 +39,7 @@
         @if ($visible->isNotEmpty())
             <div class="nav-heading">{{ $heading }}</div>
             @foreach ($visible as [$route, $label, $icon])
-                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
+                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index', 'cash.daily', 'pos.index']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
             @endforeach
         @endif
     @endforeach

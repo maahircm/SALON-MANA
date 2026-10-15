@@ -2,7 +2,7 @@
 
 Full-stack salon ERP + CRM built with Laravel 13 (PHP 8.3+), MySQL 8, Blade, Bootstrap 5.
 
-> **Status: Phases 1–2 complete (foundation + core salon operations).** POS, inventory, finance, HR extensions and reports
+> **Status: Phases 1–3 complete (foundation, core salon operations, POS & finance).** Inventory, HR extensions, loyalty and reports
 > are built in later phases — see [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). This README is extended each phase.
 
 ## Implemented so far
@@ -38,6 +38,34 @@ shift existing rows, so set it before going live.
 **Money:** all amounts are `DECIMAL(12,2)` columns; PHP arithmetic uses `App\Support\Money` (integer cents). No `bcmath` extension is required.
 
 **Calendar:** uses FullCalendar from a pinned CDN URL (jsDelivr). The browser needs internet access to load it (as for Bootstrap).
+
+## Phase 3 — POS and finance
+- **POS checkout** (`/pos`): search a customer, add services (or open a booked appointment's *Checkout*), assign the provider per line, quantities, authorised discounts,
+  tax, split payments (cash / card / bank transfer / mobile money; methods are rows in `payment_methods`), partial payments and sales on account, draft sales, printable receipts.
+  Totals shown in the browser are for display only: the **server re-prices every cart** from the catalogue / booked line (the browser cannot set prices, tax or totals).
+- **Invoices:** gap-free numbers (`INV-000001`, prefix/digits configurable), one customer, many payments, status *draft → issued → voided*, payment status *unpaid / partially paid / paid*.
+  An issued invoice's lines, prices, tax and totals are frozen (enforced in the models). `Balance due = total − payments`; refunds never change it.
+- **Payments** are append-only and idempotent (`idempotency_key`): double-clicks, back-button resubmits and retries record one payment. An invoice is `paid` only when payments ≥ total; overpayment is refused.
+- **Refunds** are item/quantity based, need `pos.refund` + a reason, can never exceed money actually paid and not yet refunded, and must go back through a method the customer paid
+  with (capped per method). They add a linked record (`RF-000001`); the invoice and its payments stay untouched. **Void** (`pos.void`) is only possible when no net customer money is held.
+- **Discounts:** per line, % or fixed. Needs `pos.discount`; above the limit (Settings › POS, default 10%) needs `pos.discount_unlimited`; approvals are flagged in the audit log.
+- **Cash drawer:** a cashier opens a session (opening cash), all payments/refunds attach to it, paid-in / paid-out are recorded with reasons, and closing computes
+  `expected = opening + cash sales − cash refunds + paid-in − paid-out`, compares it with the counted cash, **requires an explanation for any variance**, stores an immutable snapshot and freezes the session.
+  One open session per drawer and per cashier (database-enforced). Managers (`pos.close`) can review/close any session, manage drawers and view the **Daily Summary**.
+- **Audit trail:** invoice issue/void, every payment, refund, drawer open/close/movements, receipt reprints and POS settings changes are written to the audit log.
+- **Extension points:** `InvoiceIssued`, `PaymentRecorded` and `RefundProcessed` events fire after commit; stock deduction, commissions and loyalty (later phases) subscribe to them.
+
+Accounting vocabulary used on screen: *Sales (invoiced)*, *Payments collected*, *Refunds*, *Outstanding balances (receivables)* — kept separate; nothing here is called profit.
+This is a point-of-sale cash book, **not** a double-entry general ledger.
+
+**Not in Phase 3 (by design):** retail product lines and stock deduction (Phase 4), add-ons at checkout, commissions and loyalty points (Phase 5), expenses and profit estimates (Phase 6),
+external card/mobile-money gateways (not implemented: record the gateway reference manually; any gateway needs provider credentials and its own authenticated, idempotent webhook).
+
+**Upgrading from Phase 2:** `php artisan migrate && php artisan salon:sync-permissions`. New permissions `pos.void` and `pos.discount_unlimited` exist; new installs give Cashiers only
+`pos.drawer` (they close their own session) and Managers `pos.refund`, `pos.void`, `pos.close`. Existing roles keep their customised permissions — adjust them under *Roles & Permissions*.
+The migration seeds four payment methods and one drawer ("Main drawer"); add more under *Cash Drawer › Manage drawers*.
+
+**Daily routine:** cashier opens a drawer session → takes sales/payments → at shift end counts the drawer and closes the session → manager reviews *Daily Summary*.
 
 ## Prerequisites
 PHP 8.3+ with extensions: `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl`, `gd` recommended); Composer 2; MySQL 8.

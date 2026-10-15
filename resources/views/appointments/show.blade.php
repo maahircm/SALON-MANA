@@ -35,6 +35,7 @@
     @endforeach
     @if ($canEdit)<a class="btn btn-outline-secondary" href="{{ route('appointments.edit', $appointment) }}">Reschedule / edit</a>@endif
     @if ($next->isEmpty() && ! $canEdit)<span class="text-muted small">No further actions available.</span>@endif
+    @if (in_array($appointment->status, [\App\Enums\AppointmentStatus::CheckedIn, \App\Enums\AppointmentStatus::InService, \App\Enums\AppointmentStatus::Completed], true)) @can('pos.use')<a class="btn btn-success" href="{{ route('pos.index', ['appointment' => $appointment->id]) }}"><i class="bi bi-cart-check"></i> Checkout</a>@endcan @endif
     <a class="btn btn-light" href="{{ route('customers.show', $appointment->customer) }}">Customer profile</a>
     <div class="small text-muted">Completing a service does not mark anything as paid; payment is taken at checkout.</div>
 </div></div></div></div>

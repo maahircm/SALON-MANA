@@ -45,7 +45,7 @@ class PagesRenderTest extends TestCase
             "/appointments/create?customer_id={$customer->id}&date=2026-10-21&time=11:00", "/appointments/{$appt->id}", "/appointments/{$appt->id}/edit", '/rooms', '/settings/booking',
         ];
         foreach ($urls as $url) {
-            $this->actingAs($admin)->get($url)->assertOk();
+            $this->assertNoNestedForms($this->actingAs($admin)->get($url)->assertOk()->getContent(), $url);
         }
         // sidebar exposes the new modules and every link target exists
         $html = $this->actingAs($admin)->get('/dashboard')->assertSee('Appointment Calendar')->assertSee('Customers')->assertSee('Staff Schedule')->getContent();

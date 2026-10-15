@@ -23,7 +23,8 @@
     // Prevent duplicate submissions (double click / slow network).
     if (form.dataset.submitting) { e.preventDefault(); return; }
     form.dataset.submitting = '1';
-    form.querySelectorAll('button[type=submit]').forEach(b => { b.disabled = true; });
+    // Disable after the browser has built the form data, otherwise the clicked button's name/value would be dropped.
+    setTimeout(() => form.querySelectorAll('button[type=submit]').forEach(b => { b.disabled = true; }), 0);
     setTimeout(() => { delete form.dataset.submitting; form.querySelectorAll('button[type=submit]').forEach(b => { b.disabled = false; }); }, 8000);
   });
   if (modalEl && typeof bootstrap !== 'undefined') {

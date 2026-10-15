@@ -25,7 +25,16 @@
         @if ($customer->isBookable()) @can('appointments.create')<a class="btn btn-sm btn-primary" href="{{ route('appointments.create', ['customer_id' => $customer->id]) }}"><i class="bi bi-calendar-plus"></i> Book</a>@endcan @endif
         @if (! $customer->isArchived()) @can('archive', $customer)<x-confirm-form method="delete" :action="route('customers.destroy', $customer)" message="Archive {{ $customer->name }}? They will no longer be bookable; history is kept." label="Archive" />@endcan @endif
     </div></div>
-    <div class="card mb-3"><div class="card-header">Lifetime value &amp; loyalty</div><div class="card-body text-muted small">Purchases, payments, loyalty points and lifetime value appear here once the POS and loyalty modules are enabled.</div></div>
+    @if ($billing)
+    <div class="card mb-3"><div class="card-header">Purchases &amp; balance</div><div class="card-body">
+        <dl class="row mb-0 small"><dt class="col-7">Invoices</dt><dd class="col-5 text-end">{{ $billing['invoice_count'] }}</dd>
+            <dt class="col-7">Lifetime value (paid − refunds)</dt><dd class="col-5 text-end">{{ money($billing['lifetime_paid']) }}</dd>
+            <dt class="col-7">Outstanding balance</dt><dd class="col-5 text-end {{ \App\Support\Money::compare($billing['outstanding'], '0') > 0 ? 'text-danger fw-bold' : '' }}">{{ money($billing['outstanding']) }}</dd></dl>
+        @foreach ($billing['recent']->take(5) as $inv)<div class="small mt-1"><a href="{{ route('invoices.show', $inv) }}">{{ $inv->invoice_number }}</a> · {{ money($inv->total) }} · {{ ucwords(str_replace('_', ' ', $inv->payment_status)) }}</div>@endforeach
+        <div class="mt-2"><a class="small" href="{{ route('invoices.index', ['customer_id' => $customer->id]) }}">All invoices</a></div>
+    </div></div>
+    @endif
+    <div class="card mb-3"><div class="card-header">Loyalty</div><div class="card-body text-muted small">Loyalty points and membership appear here once the loyalty module is enabled.</div></div>
     @can('archive', $customer) @if (! $customer->anonymized_at)
     <div class="card border-danger-subtle"><div class="card-header text-danger">Privacy erasure</div><div class="card-body">
         <p class="small text-muted">Permanently removes this customer's personal data (name, contact details, notes, preferences) while keeping appointment and financial records.</p>

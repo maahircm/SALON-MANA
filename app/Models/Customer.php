@@ -57,6 +57,11 @@ class Customer extends Model
         return $this->hasMany(Appointment::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     public function isArchived(): bool
     {
         return $this->deleted_at !== null;

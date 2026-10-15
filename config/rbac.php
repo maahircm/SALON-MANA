@@ -48,11 +48,13 @@ return [
         ],
         'Point of Sale' => [
             'pos.use' => 'Use POS checkout',
-            'pos.discount' => 'Apply discounts',
+            'pos.discount' => 'Apply discounts up to the configured limit',
+            'pos.discount_unlimited' => 'Apply discounts above the configured limit',
             'pos.refund' => 'Process refunds',
+            'pos.void' => 'Void invoices and delete other users\' drafts',
             'pos.invoices' => 'View invoices and payments',
-            'pos.drawer' => 'Operate cash drawer',
-            'pos.close' => 'Close and reconcile cash drawer',
+            'pos.drawer' => 'Open, move cash in/out of and close own cash drawer session',
+            'pos.close' => 'Review all drawer sessions, close others\' sessions, daily summary',
         ],
         'Inventory' => [
             'inventory.view' => 'View products and stock',
@@ -97,7 +99,7 @@ return [
         'manager' => ['name' => 'Salon Manager', 'permissions' => [
             'dashboard.*', 'customers.*', 'services.*', 'appointments.*', 'employees.view',
             'employees.schedule', 'employees.attendance', 'employees.leave', 'pos.use', 'pos.discount', 'pos.invoices',
-            'pos.drawer', 'pos.close', 'inventory.view', 'inventory.adjust', 'expenses.view', 'expenses.create',
+            'pos.refund', 'pos.void', 'pos.drawer', 'pos.close', 'inventory.view', 'inventory.adjust', 'expenses.view', 'expenses.create',
             'loyalty.*', 'reports.view', 'reports.export',
         ]],
         'receptionist' => ['name' => 'Receptionist', 'permissions' => [
@@ -111,7 +113,7 @@ return [
         ]],
         'cashier' => ['name' => 'Cashier', 'permissions' => [
             'dashboard.view', 'customers.view', 'services.view', 'appointments.view',
-            'pos.use', 'pos.invoices', 'pos.drawer', 'pos.close', 'inventory.view', 'loyalty.view', 'appointments.all',
+            'pos.use', 'pos.invoices', 'pos.drawer', 'inventory.view', 'loyalty.view', 'appointments.all',
         ]],
         'inventory-manager' => ['name' => 'Inventory Manager', 'permissions' => [
             'dashboard.view', 'inventory.*', 'reports.view',

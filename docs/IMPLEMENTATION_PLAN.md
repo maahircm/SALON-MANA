@@ -30,8 +30,14 @@ Decisions
 - [x] Booking settings (hours, buffer, policy); stylist-scoped visibility
 - Deferred by design: service images, service consumables (Phase 4 needs products), add-ons selected at checkout (Phase 3),
   loyalty/membership/LTV (Phase 5), reminder delivery (Phase 6; `reminder_at` is already computed), leave-aware availability (Phase 5).
-## Phase 3 — POS and finance
-Invoices, payments (idempotent), receipts, refunds, cash drawer, daily closing, audit trail.
+## Phase 3 — POS and finance  [DONE]
+- [x] Invoices (drafts, gap-free numbering, frozen once issued), server-side pricing, tax and discount policy
+- [x] POS checkout, split / partial payments, sales on account, idempotent payments, printable receipts + reprint tracking
+- [x] Refunds (item based, capped by paid amount and per method), void rules
+- [x] Cash drawers, sessions, paid-in/out, reconciliation, variance rules, daily summary
+- [x] Financial audit trail; events for later modules; POS settings
+- Deferred by design: retail product lines (Phase 4), commissions / loyalty (Phase 5), expenses & profit (Phase 6), payment gateways (needs provider credentials).
+
 ## Phase 4 — Inventory and procurement
 Products, suppliers, POs, goods receipt, immutable stock ledger, consumables.
 ## Phase 5 — HR and CRM extensions

@@ -5,10 +5,15 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\BookingSettingsController;
+use App\Http\Controllers\CashDrawerController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\PosSettingsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
@@ -103,4 +108,32 @@ Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
     // Settings (booking policy & hours)
     Route::get('settings/booking', [BookingSettingsController::class, 'edit'])->name('settings.booking');
     Route::put('settings/booking', [BookingSettingsController::class, 'update'])->name('settings.booking.update');
+});
+
+// ---- Phase 3: POS and finance ----
+Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
+    Route::get('pos', [PosController::class, 'index'])->name('pos.index');
+    Route::post('pos', [PosController::class, 'store'])->middleware('throttle:60,1')->name('pos.store');
+    Route::delete('pos/drafts/{invoice}', [PosController::class, 'destroyDraft'])->name('pos.drafts.destroy');
+
+    Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
+    Route::get('invoices/{invoice}/receipt', [InvoiceController::class, 'receipt'])->name('invoices.receipt');
+    Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'storePayment'])->middleware('throttle:60,1')->name('invoices.payments.store');
+    Route::post('invoices/{invoice}/refunds', [InvoiceController::class, 'storeRefund'])->middleware('throttle:sensitive')->name('invoices.refunds.store');
+    Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])->middleware('throttle:sensitive')->name('invoices.void');
+    Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+
+    Route::get('cash', [CashDrawerController::class, 'index'])->name('cash.index');
+    Route::post('cash/open', [CashDrawerController::class, 'open'])->name('cash.open');
+    Route::get('cash/daily', [CashDrawerController::class, 'daily'])->name('cash.daily');
+    Route::get('cash/drawers', [CashDrawerController::class, 'drawers'])->name('cash.drawers');
+    Route::post('cash/drawers', [CashDrawerController::class, 'storeDrawer'])->name('cash.drawers.store');
+    Route::post('cash/drawers/{drawer}/toggle', [CashDrawerController::class, 'toggleDrawer'])->name('cash.drawers.toggle');
+    Route::get('cash/sessions/{session}', [CashDrawerController::class, 'show'])->name('cash.show');
+    Route::post('cash/sessions/{session}/movements', [CashDrawerController::class, 'movement'])->name('cash.movement');
+    Route::post('cash/sessions/{session}/close', [CashDrawerController::class, 'close'])->middleware('throttle:sensitive')->name('cash.close');
+
+    Route::get('settings/pos', [PosSettingsController::class, 'edit'])->name('settings.pos');
+    Route::put('settings/pos', [PosSettingsController::class, 'update'])->name('settings.pos.update');
 });

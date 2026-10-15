@@ -30,6 +30,7 @@ return [
         ],
         'Appointments' => [
             'appointments.view' => 'View appointments',
+            'appointments.all' => 'View all staff appointments (otherwise only own)',
             'appointments.create' => 'Book appointments',
             'appointments.update' => 'Edit / reschedule appointments',
             'appointments.status' => 'Change appointment status',
@@ -101,7 +102,7 @@ return [
         ]],
         'receptionist' => ['name' => 'Receptionist', 'permissions' => [
             'dashboard.view', 'customers.view', 'customers.create', 'customers.update', 'services.view',
-            'appointments.view', 'appointments.create', 'appointments.update', 'appointments.status',
+            'appointments.view', 'appointments.all', 'appointments.create', 'appointments.update', 'appointments.status',
             'appointments.cancel', 'employees.view', 'loyalty.view',
         ]],
         'stylist' => ['name' => 'Stylist / Beautician', 'permissions' => [
@@ -110,7 +111,7 @@ return [
         ]],
         'cashier' => ['name' => 'Cashier', 'permissions' => [
             'dashboard.view', 'customers.view', 'services.view', 'appointments.view',
-            'pos.use', 'pos.invoices', 'pos.drawer', 'pos.close', 'inventory.view', 'loyalty.view',
+            'pos.use', 'pos.invoices', 'pos.drawer', 'pos.close', 'inventory.view', 'loyalty.view', 'appointments.all',
         ]],
         'inventory-manager' => ['name' => 'Inventory Manager', 'permissions' => [
             'dashboard.view', 'inventory.*', 'reports.view',

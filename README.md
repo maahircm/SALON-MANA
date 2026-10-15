@@ -2,7 +2,7 @@
 
 Full-stack salon ERP + CRM built with Laravel 13 (PHP 8.3+), MySQL 8, Blade, Bootstrap 5.
 
-> **Status: Phase 1 (Foundation) complete.** Business modules (customers, appointments, POS, inventory, finance, reports)
+> **Status: Phases 1–2 complete (foundation + core salon operations).** POS, inventory, finance, HR extensions and reports
 > are built in later phases — see [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). This README is extended each phase.
 
 ## Implemented so far
@@ -11,6 +11,33 @@ Full-stack salon ERP + CRM built with Laravel 13 (PHP 8.3+), MySQL 8, Blade, Boo
 - Role-based access control: 9 predefined roles, custom roles, granular permissions (`config/rbac.php`), privilege-escalation guards
 - User administration; immutable, redacted audit log with correlation IDs; unauthorized (403) / error pages
 - Reusable Blade components (KPI card, inputs, table, pagination, modal, confirm form, alerts)
+
+## Phase 2 — core salon operations
+- **Customers:** register / edit / search / archive, auto customer numbers, duplicate-phone warning, preferences, restricted allergy & medical notes
+  (`customers.sensitive`), appointment history, birthday-month and marketing-consent filters, audited CSV export, privacy erasure (anonymise) action.
+  Marketing consent is recorded explicitly (default: no consent). Purchases, loyalty and lifetime value appear when POS/loyalty land.
+- **Services & pricing:** categories, services (duration, price, promo price with dates, tax rate, required skill), add-ons, packages, price history.
+  Only `services.price` holders can change prices. Appointment lines snapshot name/price/tax/duration, so later changes never rewrite history.
+- **Employees:** directory, profile, skills, employment status changes (audited, reason), commission settings, salary (restricted to `employees.sensitive`),
+  link to a user account, weekly schedule, dated shifts / days off, staff schedule overview, chairs & rooms.
+- **Appointments:** day/week/month calendar, list, booking (multi-service, per-service stylist and chair/room), walk-ins, free-slot finder, reschedule,
+  cancellation with reason and policy, no-show, status history. Statuses: Pending → Confirmed → Checked In → In Service → Completed (+ Cancelled, No Show).
+- **Booking rules (all server-side, inside a DB transaction that locks the stylist/room rows first):** no overlapping bookings per stylist or chair/room,
+  configurable buffer, stylist working hours + salon opening hours, required skills, notice/advance limits, customer cannot be double-booked,
+  completed appointments editable only with `appointments.override` + a reason. A completed appointment is **not** marked paid.
+- **Booking settings** (Administration › Booking Settings, `settings.manage`): opening hours, buffer, slot interval, cancellation notice and late-cancellation policy
+  (flag or block), reminder lead time, optional stylist overlap.
+- **Stylists** only see appointments they perform (their user account must be linked to their employee record); `appointments.all` shows everyone's.
+
+**Upgrading from Phase 1:** run `php artisan migrate` then `php artisan salon:sync-permissions`. The new `appointments.all` permission is given to new roles automatically, but
+existing roles keep their customised permissions, so tick it for Receptionist/Cashier/Manager under *Roles & Permissions* if they should see all appointments.
+
+**Time zone:** appointment times are stored in the salon time zone (`APP_TIMEZONE`, default `Africa/Mogadishu`, no daylight saving). Changing the zone later does not
+shift existing rows, so set it before going live.
+
+**Money:** all amounts are `DECIMAL(12,2)` columns; PHP arithmetic uses `App\Support\Money` (integer cents). No `bcmath` extension is required.
+
+**Calendar:** uses FullCalendar from a pinned CDN URL (jsDelivr). The browser needs internet access to load it (as for Bootstrap).
 
 ## Prerequisites
 PHP 8.3+ with extensions: `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl`, `gd` recommended); Composer 2; MySQL 8.

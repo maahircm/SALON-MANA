@@ -22,8 +22,14 @@ Decisions
 - [x] Secure admin bootstrap command (`salon:create-admin`), no default password
 - [x] Tests, README (initial)
 
-## Phase 2 — Core salon operations
-Customers, services/pricing, employees, schedules, appointments, availability, booking validation.
+## Phase 2 — Core salon operations  [DONE]
+- [x] Customer CRM (CRUD, search, duplicates, archive, anonymise, preferences, restricted notes, export)
+- [x] Services, categories, add-ons, packages, price history & snapshots
+- [x] Employees, skills, status changes, weekly schedules, dated shifts, staff schedule view, chairs/rooms
+- [x] Appointments: calendar, booking, walk-in, availability, reschedule, status workflow, cancellation policy
+- [x] Booking settings (hours, buffer, policy); stylist-scoped visibility
+- Deferred by design: service images, service consumables (Phase 4 needs products), add-ons selected at checkout (Phase 3),
+  loyalty/membership/LTV (Phase 5), reminder delivery (Phase 6; `reminder_at` is already computed), leave-aware availability (Phase 5).
 ## Phase 3 — POS and finance
 Invoices, payments (idempotent), receipts, refunds, cash drawer, daily closing, audit trail.
 ## Phase 4 — Inventory and procurement

@@ -3,9 +3,22 @@
     // Only items whose route exists are rendered, so the menu never contains dead links.
     $nav = [
         'Overview' => [['dashboard', 'Dashboard', 'bi-speedometer2', 'dashboard.view']],
+        'Salon' => [
+            ['appointments.calendar', 'Appointment Calendar', 'bi-calendar-week', 'appointments.view'],
+            ['appointments.list', 'Appointments', 'bi-list-check', 'appointments.view'],
+            ['customers.index', 'Customers', 'bi-person-heart', 'customers.view'],
+            ['services.index', 'Services', 'bi-scissors', 'services.view'],
+            ['packages.index', 'Packages', 'bi-box2-heart', 'services.view'],
+        ],
+        'Team' => [
+            ['employees.index', 'Employees', 'bi-person-badge', 'employees.view'],
+            ['schedules.index', 'Staff Schedule', 'bi-calendar3', 'employees.view'],
+            ['rooms.index', 'Chairs & Rooms', 'bi-door-open', 'employees.schedule'],
+        ],
         'Administration' => [
             ['users.index', 'Users', 'bi-people', 'users.view'],
             ['roles.index', 'Roles & Permissions', 'bi-shield-lock', 'roles.manage'],
+            ['settings.booking', 'Booking Settings', 'bi-gear', 'settings.manage'],
             ['audit.index', 'Audit Log', 'bi-journal-text', 'audit.view'],
         ],
     ];
@@ -18,7 +31,7 @@
         @if ($visible->isNotEmpty())
             <div class="nav-heading">{{ $heading }}</div>
             @foreach ($visible as [$route, $label, $icon])
-                <a class="nav-item {{ request()->routeIs(Str::beforeLast($route, '.').'.*') || request()->routeIs($route) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
+                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
             @endforeach
         @endif
     @endforeach

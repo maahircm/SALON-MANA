@@ -55,5 +55,11 @@ Decisions
 - [x] General settings applied at runtime (profile, logo, timezone, currency, formats, tax, receipt), notification settings
 - [x] Notifications: in-app, email, SMS abstraction (log driver only), queued jobs with retry, delivery log, dedupe, scheduled automations
 - [ ] Needs external services to be real: SMTP credentials, an SMS gateway driver
-## Phase 7 — Hardening and release
-Full tests, security/perf review, backup/restore verification, deployment docs, acceptance report.
+## Phase 7 — Hardening and release  [DONE — see ACCEPTANCE_REPORT.md]
+- [x] Full test suite on SQLite and MySQL 8, plus MySQL-only parallel-process race tests (`--group=mysql`)
+- [x] Security review: headers/CSP, route authorisation sweep, upload and mass-assignment review, rate limits, private files
+- [x] Performance review: lazy-loading guard, index review, measured on 30,000 invoices, customer-list fix
+- [x] Data integrity checker (`salon:integrity-check`, weekly, alerting)
+- [x] Backup / restore / verify commands, verified on real MySQL and SQLite
+- [x] README (install, Windows/XAMPP, scheduler, queue, backup, deployment, HTTPS, troubleshooting) and acceptance report
+- [ ] Not verifiable here: web-server/TLS deployment, Windows run, real SMTP/SMS, supervised workers (see report §6)

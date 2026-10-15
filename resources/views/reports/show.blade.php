@@ -29,11 +29,12 @@
 </div>
 <div class="card"><div class="card-header"><strong>{{ $definition['title'] }}</strong> <span class="text-muted">· {{ $definition['dated'] ? $range->label() : 'current position' }}</span></div>
     @if ($truncated)<div class="alert alert-warning m-3 mb-0">Only the first {{ number_format(\App\Services\ReportCatalog::MAX_ROWS) }} rows are shown. Narrow the period.</div>@endif
-    <x-table :headers="array_map(fn ($c) => $c[0], $definition['columns'])">
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+        <thead><tr>@foreach ($definition['columns'] as [$label, $type])<th scope="col" @class(['text-end' => in_array($type, ['money', 'int', 'qty', 'percent'])])>{{ $label }}</th>@endforeach</tr></thead><tbody>
         @forelse ($rows as $row)<tr>@foreach ($definition['columns'] as $col => [$label, $type])<td @class(['text-end' => in_array($type, ['money', 'int', 'qty', 'percent'])])>{{ $fmt($row[$col] ?? null, $type) }}</td>@endforeach</tr>
         @empty<tr><td colspan="{{ count($definition['columns']) }}"><x-empty-state icon="bi-bar-chart" title="No data for this selection" /></td></tr>@endforelse
         @if ($rows->isNotEmpty() && $totals)<tr class="fw-semibold table-light">@foreach ($definition['columns'] as $col => [$label, $type])<td @class(['text-end' => in_array($type, ['money', 'int', 'qty', 'percent'])])>@if ($loop->first)Total @endif{{ isset($totals[$col]) ? $fmt($totals[$col], $type) : '' }}</td>@endforeach</tr>@endif
-    </x-table>
+    </tbody></table></div>
     @if ($paginator)<x-pagination :paginator="$paginator" />@endif</div>
 @if ($print)<script>window.addEventListener('load', () => window.print());</script>@endif
 @endsection

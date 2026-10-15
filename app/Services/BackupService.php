@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -71,12 +72,33 @@ class BackupService
         [$name, $config] = $this->connection($connection);
         $this->verifyChecksum($file);
         $scratchConfig = $config;
+        $provided = $scratch !== null;
         if ($this->isMysql($config)) {
             $scratch ??= $config['database'].'_verify_'.bin2hex(random_bytes(3));
             if ($scratch === $config['database']) {
                 throw new RuntimeException('The scratch database must be different from the live database.');
             }
-            DB::connection($name)->statement('CREATE DATABASE IF NOT EXISTS `'.str_replace('`', '``', $scratch).'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+            $quoted = '`'.str_replace('`', '``', $scratch).'`';
+            if ($provided) {
+                // A database the administrator created for this purpose: it must exist and be empty; it is emptied again afterwards.
+                try {
+                    $existing = DB::connection($name)->select('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ?', [$scratch]);
+                } catch (\Throwable) {
+                    $existing = [];
+                }
+                if (! DB::connection($name)->select('SELECT 1 FROM information_schema.schemata WHERE schema_name = ?', [$scratch])) {
+                    throw new RuntimeException("The scratch database {$scratch} does not exist (or the database user cannot see it). Create it empty and grant this user all privileges on it.");
+                }
+                if (($existing[0]->n ?? 1) > 0) {
+                    throw new RuntimeException("The scratch database {$scratch} is not empty; refusing to overwrite it.");
+                }
+            } else {
+                try {
+                    DB::connection($name)->statement("CREATE DATABASE IF NOT EXISTS {$quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                } catch (QueryException $e) {
+                    throw new RuntimeException("The database user may not create a scratch database. Create an empty database yourself, grant this user all privileges on it, and run again with --scratch=<name>. ({$e->errorInfo[2]})");
+                }
+            }
             $scratchConfig['database'] = $scratch;
             $this->loadMysqlDump($scratchConfig, $file);
         } elseif ($config['driver'] === 'sqlite') {
@@ -103,16 +125,28 @@ class BackupService
             app(SettingsService::class)->flush();
             DB::purge('salon_verify');
             if ($dropScratch) {
-                $this->dropScratch($name, $config, $scratch);
+                $this->dropScratch($name, $config, $scratch, $provided);
             }
         }
 
         return ['tables' => $tables, 'integrity' => $integrity, 'scratch' => $scratch];
     }
 
-    private function dropScratch(string $name, array $config, string $scratch): void
+    private function dropScratch(string $name, array $config, string $scratch, bool $provided): void
     {
-        if ($this->isMysql($config)) {
+        if ($this->isMysql($config) && $provided) {
+            // Empty the administrator's database but leave the database itself.
+            $scratchConfig = ['database' => $scratch] + $config;
+            config(['database.connections.salon_verify' => $scratchConfig]);
+            DB::purge('salon_verify');
+            $connection = DB::connection('salon_verify');
+            $connection->statement('SET FOREIGN_KEY_CHECKS=0');
+            foreach (array_column(Schema::connection('salon_verify')->getTables(), 'name') as $table) {
+                $connection->statement('DROP TABLE IF EXISTS `'.str_replace('`', '``', $table).'`');
+            }
+            $connection->statement('SET FOREIGN_KEY_CHECKS=1');
+            DB::purge('salon_verify');
+        } elseif ($this->isMysql($config)) {
             DB::connection($name)->statement('DROP DATABASE IF EXISTS `'.str_replace('`', '``', $scratch).'`');
         } else {
             @unlink($scratch);

@@ -1,18 +1,217 @@
 # Salon Management System
 
-Full-stack salon ERP + CRM built with Laravel 13 (PHP 8.3+), MySQL 8, Blade, Bootstrap 5.
+Full-stack salon ERP + CRM: appointments, customers, point of sale, payments and refunds, cash drawer, inventory and purchasing, staff attendance / leave /
+commissions, loyalty and memberships, promotions, expenses, finance summary, reports, notifications. Laravel 13 (PHP 8.3+), MySQL 8, Blade, Bootstrap 5, Chart.js.
 
-> **Status: Phases 1–4 complete (foundation, core salon operations, POS & finance, inventory & procurement).** HR extensions, loyalty, reports
-> and release hardening follow — see [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). This README is extended each phase.
+> **Release status.** All seven build phases are implemented and verified; see [`docs/ACCEPTANCE_REPORT.md`](docs/ACCEPTANCE_REPORT.md) for exactly what was
+> tested (and on which database), what was measured, and what depends on configuration only you can supply (SMTP, an SMS gateway, TLS certificate, off-site
+> backup storage). Read its "Known limitations" before going live.
 
-## Implemented so far
+Contents: [Install](#install) · [Configuration](#configuration) · [First administrator](#first-administrator) · [Scheduler and queue](#scheduler-and-queue-worker) ·
+[Backup and restore](#backup-and-restore) · [Integrity check](#data-integrity-check) · [Tests](#tests) · [Production deployment](#production-deployment) ·
+[Troubleshooting](#troubleshooting) · [Roles](#roles) · [Security notes](#security-notes) · [Feature reference](#feature-reference)
+
+## Install
+
+### Prerequisites
+- PHP **8.3+** with extensions `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl` and `gd` recommended). Check with `php -m`.
+- Composer 2, MySQL **8.0+** (or MariaDB 10.6+; the test-suite and the race tests were run on MySQL 8). `mysqldump` and `mysql` command-line tools for backups.
+- No Node/npm build: Bootstrap, Bootstrap Icons and Chart.js are loaded from pinned jsDelivr URLs. An air-gapped installation must self-host those files and adjust the
+  Content-Security-Policy in `app/Http/Middleware/SecurityHeaders.php`.
+
+### Linux / macOS
+```bash
+git clone <repository-url> salon && cd salon
+composer install --no-dev --optimize-autoloader   # omit --no-dev on a development machine
+cp .env.example .env
+php artisan key:generate
+# create the database and a least-privilege user (see "Database" below), then edit DB_* in .env
+php artisan migrate --seed          # tables + roles/permissions only. No user, no password.
+php artisan salon:create-admin      # prompts for name, email and password
+php artisan storage:link            # public logo; receipts stay private
+php artisan serve                   # development server on http://127.0.0.1:8000
+```
+
+### Windows with XAMPP (Apache + MySQL + phpMyAdmin)
+1. Install **XAMPP with PHP 8.3** and **Composer**. In `C:\xampp\php\php.ini` make sure these lines are *not* commented out: `extension=pdo_mysql`, `extension=mbstring`, `extension=openssl`,
+   `extension=fileinfo`, `extension=zip`, `extension=curl`, `extension=intl`, `extension=gd`. Restart Apache afterwards. Add `C:\xampp\php` and `C:\xampp\mysql\bin` to the Windows `PATH`.
+2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
+3. Open `http://localhost/phpmyadmin` → **New** → database name `salon_mana`, collation `utf8mb4_unicode_ci` → **Create**.
+   Then *User accounts → Add user account*: user `salon_app`, host `localhost`, a strong password, *Grant all privileges on database* `salon_mana` (nothing else). (XAMPP's `root` with an empty password is for a throw-away local test only.)
+4. In **Command Prompt** in the project folder:
+   ```bat
+   composer install
+   copy .env.example .env
+   php artisan key:generate
+   ```
+5. Edit `.env` with Notepad: `DB_DATABASE=salon_mana`, `DB_USERNAME=salon_app`, `DB_PASSWORD=<the password>`. For backups also set
+   `MYSQLDUMP_PATH="C:\xampp\mysql\bin\mysqldump.exe"` and `MYSQL_CLIENT_PATH="C:\xampp\mysql\bin\mysql.exe"`.
+6. ```bat
+   php artisan migrate --seed
+   php artisan salon:create-admin
+   php artisan storage:link
+   php artisan serve
+   ```
+   Browse to `http://127.0.0.1:8000`. To serve through Apache instead, point a virtual host's `DocumentRoot` at the project's `public` folder (see "Production deployment").
+
+### Database
+```sql
+CREATE DATABASE salon_mana CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'salon_app'@'127.0.0.1' IDENTIFIED BY '<strong password>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON salon_mana.* TO 'salon_app'@'127.0.0.1';
+```
+(`CREATE/ALTER/DROP` are needed by `php artisan migrate`; once installed you may revoke them and grant them again only for upgrades.)
+
+**Isolation level.** The application sets `READ COMMITTED` on every MySQL connection (`DB_ISOLATION_LEVEL`, applied in `config/database.php`; no server change needed). Booking,
+stock and document numbering lock rows and then re-read them; under MySQL's default REPEATABLE READ that pattern allowed double bookings in load tests. Deadlocks are retried automatically.
+
+## Configuration
+Everything secret lives in `.env` (never committed). Salon-specific values (name, logo, timezone, currency, formats, tax, receipts, notifications, POS/inventory/HR rules) are edited in the
+application under **Administration → Settings** and stored in the database. `.env.example` documents every variable; the important ones:
+
+| Variable | Meaning |
+|---|---|
+| `APP_ENV`, `APP_DEBUG`, `APP_URL` | `production`, `false` and the real `https://` URL in production |
+| `APP_TIMEZONE` | salon timezone (editable in Settings only before the first appointment/invoice) |
+| `DB_*`, `DB_ISOLATION_LEVEL` | database connection; keep `READ COMMITTED` |
+| `SESSION_SECURE_COOKIE` | `true` when served over HTTPS |
+| `MAIL_*` | SMTP for real email (`MAIL_MAILER=log` only writes emails to `storage/logs`) |
+| `SMS_DRIVER` | `log` (default: texts are logged, **not delivered**) |
+| `QUEUE_CONNECTION` | `database` (default); a worker must run — see below |
+| `TRUSTED_PROXIES` | proxy IPs or `*` when behind a load balancer |
+| `BACKUP_DIRECTORY`, `BACKUP_KEEP`, `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH` | backups |
+
+After changing `.env` in production run `php artisan config:clear` (or `config:cache` again).
+
+## First administrator
+There is **no default user and no default password**. `php artisan salon:create-admin` prompts for a name, an email and a password (minimum length and complexity enforced) and creates a Super Administrator.
+For unattended provisioning set the environment variable `SALON_ADMIN_PASSWORD` for that single command only. Create the day-to-day accounts (owner, manager, receptionist, cashier, …) under **Users**, then
+use the Super Administrator only for administration. New accounts must change their password at first sign-in; two-factor authentication (TOTP) can be enabled per user.
+
+## Scheduler and queue worker
+The application actually uses both:
+
+- **Scheduler** — one entry runs everything: `salon:appointment-reminders` (every 10 min), `salon:low-stock-alerts` (08:00), `salon:birthday-greetings` (08:30), `salon:payment-reminders` (09:00),
+  `salon:expire-memberships` (00:15), `salon:integrity-check --notify` (Mondays 03:00). Times are salon time.
+  - Linux cron (`crontab -e`): `* * * * * cd /var/www/salon && php artisan schedule:run >> /dev/null 2>&1`
+  - Windows Task Scheduler: *Create Basic Task* → trigger **Daily**, repeat every **1 minute** indefinitely → action *Start a program* `C:\xampp\php\php.exe`, arguments `artisan schedule:run`, *Start in* the project folder.
+- **Queue worker** — email/SMS delivery is queued (3 attempts, back-off 1 and 5 minutes). Keep a worker running:
+  - `php artisan queue:work --tries=3 --max-time=3600` (Linux: run under **Supervisor** or a systemd unit so it restarts; Windows: Task Scheduler "At startup" or NSSM).
+  - After deploying new code run `php artisan queue:restart`.
+  Without a worker, messages stay *Queued* in **Administration → Message Delivery Log**.
+
+## Backup and restore
+```bash
+php artisan salon:backup --files --verify   # gzip dump + SHA-256 + (receipts/logo zip) ; --verify restores it into a scratch database and checks it
+php artisan salon:backup --keep=30          # keep the newest 30 backups (default BACKUP_KEEP=14)
+php artisan salon:verify-backup storage/app/backups/salon-salon_mana-20261015-030000.sql.gz --scratch=salon_verify
+php artisan down                            # take the site offline before a restore
+php artisan salon:restore storage/app/backups/salon-salon_mana-20261015-030000.sql.gz
+php artisan salon:integrity-check && php artisan up
+```
+- Backups are written to `storage/app/backups` (mode 0600). **Copy them off the server** (another disk, NAS or cloud storage): a backup on the same disk does not survive a disk failure. Schedule `salon:backup` with cron / Task Scheduler (e.g. nightly), and copy the files on the same schedule.
+- `--verify` needs a scratch database: either let the tool create one (the DB user needs `CREATE`/`DROP`), or create an empty database yourself, grant the application user all privileges on it and pass `--scratch=<name>`; it is emptied afterwards and the live database is never touched.
+- Restore replaces **every table** with the backup's contents and asks for confirmation (`--force` skips it). Receipts/logo are restored by unzipping `salon-files-*.zip` into `storage/app/`.
+- Credentials are passed to `mysqldump`/`mysql` through a temporary 0600 option file, never on the command line. Dumps use `--single-transaction`, so the site stays usable while a backup runs.
+
+## Data integrity check
+`php artisan salon:integrity-check` (also weekly on the scheduler, alerting administrators in-app) recomputes and compares: stock balances vs the stock ledger, negative stock, loyalty balances vs the points ledger,
+invoice arithmetic and line sums, payments/refunds vs invoice amounts, payment status / overpayment / voided invoices holding money, document counters, coupon usage, cash-drawer variance, double-booked staff or rooms, and expense approvals.
+It only reports (exit code 1 when something is wrong, `--json` for monitoring); it never "fixes" financial data.
+
+## Tests
+The test-suite never touches your real data: it uses an in-memory SQLite database by default.
+```bash
+php artisan test                                  # whole suite on SQLite
+# against a real MySQL test database (create it first; the name must end in _test for the race tests):
+DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_DATABASE=salon_mana_test DB_USERNAME=salon_app DB_PASSWORD=... php artisan test
+php artisan test --group=mysql                    # only the MySQL-only tests: real parallel-process race tests and the mysqldump round trip
+```
+`ConcurrencyMysqlTest` starts 10 real PHP processes against MySQL and proves that exactly one cashier sells the last unit, one receptionist wins a slot, one checkout submitted ten times creates one
+invoice, a single-use coupon is redeemed once and one item is refunded once. **Warning:** it rebuilds (`migrate:fresh`) the configured database and refuses to run unless its name ends in `_test`.
+Format code with `vendor/bin/pint`.
+
+## Production deployment
+1. **Server**: PHP 8.3-FPM (or Apache mod_php) with the extensions above, MySQL 8, a web server, Composer, Supervisor (or systemd), cron.
+2. **Code**: `git clone` / `git pull`, then `composer install --no-dev --optimize-autoloader`, `cp .env.example .env` (first time), `php artisan key:generate` (first time only — never regenerate it afterwards; it encrypts sessions and two-factor secrets).
+3. **`.env`** (production values): `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://salon.example.com`, `SESSION_SECURE_COOKIE=true`, real `DB_*`, `MAIL_*`, `TRUSTED_PROXIES` if behind a proxy.
+4. **Database**: `php artisan migrate --force` (+ `php artisan salon:sync-permissions` after upgrades), first time also `php artisan db:seed --force` and `php artisan salon:create-admin`.
+5. **Optimise**: `php artisan storage:link`, `php artisan config:cache && php artisan route:cache && php artisan view:cache`, `php artisan queue:restart`.
+6. **Permissions**: the web user must be able to write `storage/` and `bootstrap/cache/` (`chown -R www-data:www-data storage bootstrap/cache`, `chmod -R ug+rwX storage bootstrap/cache`). Everything else should be read-only to it. `.env` mode `640`.
+7. **Document root** is the `public/` directory only.
+
+**Nginx**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name salon.example.com;
+    root /var/www/salon/public;
+    index index.php;
+    ssl_certificate     /etc/letsencrypt/live/salon.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/salon.example.com/privkey.pem;
+    client_max_body_size 8m;                       # receipts are limited to 5 MB
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+    location ~ \.php$ { include fastcgi_params; fastcgi_pass unix:/run/php/php8.3-fpm.sock; fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; }
+    location ~ /\.(?!well-known).* { deny all; }
+}
+server { listen 80; server_name salon.example.com; return 301 https://$host$request_uri; }
+```
+**Apache** (`mod_rewrite` on): `DocumentRoot /var/www/salon/public`, `<Directory /var/www/salon/public> AllowOverride All Require all granted </Directory>` (the shipped `public/.htaccess` does the rewriting), and a `<VirtualHost *:80>` that redirects to HTTPS.
+On XAMPP, enable `mod_rewrite` and `mod_ssl` and set `DocumentRoot "C:/path/to/salon/public"` in `httpd-vhosts.conf`.
+
+**HTTPS.** Obtain a certificate (Let's Encrypt: `sudo certbot --nginx -d salon.example.com` or `--apache`; on an internal network use your own CA), redirect port 80 to 443, then set `APP_URL=https://…` and `SESSION_SECURE_COOKIE=true`.
+With an `https://` `APP_URL` all generated links use HTTPS and the application sends `Strict-Transport-Security`. Behind a TLS-terminating proxy set `TRUSTED_PROXIES`.
+
+**Upgrading**: `php artisan down` → `git pull` → `composer install --no-dev -o` → **`php artisan salon:backup`** → `php artisan migrate --force && php artisan salon:sync-permissions` → `php artisan config:cache route:cache view:cache` → `php artisan queue:restart` → `php artisan up`.
+
+### External services you must supply
+| Need | Status in this repository |
+|---|---|
+| Outgoing email | Laravel mailer — set `MAIL_MAILER=smtp` and credentials. Not verified against a real SMTP server here (only the `log`/`array` mailers). |
+| SMS | Only the `log` driver exists (messages are recorded, never delivered). To deliver, implement `App\Contracts\SmsGateway` for your provider and bind it in `AppServiceProvider::register()` for your `SMS_DRIVER` name. |
+| Online card / mobile-money gateway | Not implemented: payments are recorded by the cashier (cash, card terminal, mobile money, bank transfer with a reference). No inbound callbacks exist, so there is no webhook to authenticate. If you add one it must verify a signature and use idempotency keys like the POS does. |
+| TLS certificate, off-site backup storage, process supervisor | Yours to provide (see above). |
+| CDN for Bootstrap/Chart.js | jsDelivr at pinned versions; self-host for offline use. |
+
+## Troubleshooting
+| Symptom | Check |
+|---|---|
+| `could not find driver` | enable `pdo_mysql` in `php.ini` (XAMPP: `extension=pdo_mysql`) and restart Apache; `php -m \| findstr pdo`. |
+| `SQLSTATE[HY000] [1045] Access denied` | `DB_USERNAME`/`DB_PASSWORD` in `.env`, then `php artisan config:clear`. |
+| `Base table or view not found` | run `php artisan migrate`. |
+| 500 / blank page | `storage/logs/laravel.log`; make `storage` and `bootstrap/cache` writable; `php artisan config:clear view:clear`. |
+| "No application encryption key" | `php artisan key:generate` (first install only). |
+| Logged out immediately / 419 Page Expired | `SESSION_SECURE_COOKIE=true` while using plain `http://`; wrong `APP_URL`; clock skew; cleared cookies. |
+| Logo or pictures missing | `php artisan storage:link`. |
+| Messages stay *Queued* | no queue worker running — `php artisan queue:work`; check `failed_jobs`. |
+| No emails arrive | `MAIL_MAILER=log` (emails are only in `storage/logs`) or SMTP settings; see the Delivery Log for the error. |
+| Texts show "Logged, not delivered" | expected with `SMS_DRIVER=log`; install a real gateway driver. |
+| Reminders never go out | scheduler not running (`php artisan schedule:list`, cron / Task Scheduler entry), reminders disabled in Notification Settings, or the appointment has no email/phone. |
+| `mysqldump` not found | set `MYSQLDUMP_PATH`/`MYSQL_CLIENT_PATH`; XAMPP: `C:\xampp\mysql\bin\…`. |
+| Charts empty/not drawn | the browser cannot reach `cdn.jsdelivr.net`; figures above the charts are unaffected. |
+| "Timezone/currency locked" | by design once appointments/invoices exist. |
+| Booking or sale error mentioning a deadlock | retried automatically; if persistent, check long-running queries and that `DB_ISOLATION_LEVEL` is `READ COMMITTED`. |
+
+## Roles
+Super Administrator (everything), Salon Owner, Salon Manager, Receptionist, Stylist / Beautician, Cashier, Inventory Manager, Accountant, HR Officer.
+Defaults are least-privilege and editable under *Roles & Permissions*. After upgrades run `php artisan salon:sync-permissions` to register new
+permissions (existing roles keep their customised assignments; grant new permissions in the UI).
+
+## Security notes
+Passwords hashed (bcrypt), CSRF on every form, output escaped, login / 2FA / password-reset throttling, session regeneration and encrypted sessions, optional TOTP two-factor, role- and permission-based authorisation with an explicit check on every
+controller action (enforced by `RouteSecuritySweepTest`), immutable redacted audit log, private receipt files served only to authorised users, validated and re-named uploads (images only for the logo — SVG refused), spreadsheet-formula-safe CSV exports,
+browser hardening headers (CSP, frame-ancestors, nosniff, referrer policy, HSTS over HTTPS) on every response, secrets only in `.env`, no default credentials. In production use `APP_DEBUG=false`, HTTPS and `SESSION_SECURE_COOKIE=true`.
+The Content-Security-Policy still allows inline scripts/styles (the views use a few inline handlers); tightening it to nonces is listed under known limitations.
+
+## Feature reference
+### Phase 1 — foundation
 - Login/logout, throttling, password reset, activation/deactivation (takes effect immediately), login activity log
 - Profile, password change, forced password change for new accounts, optional TOTP two-factor auth with recovery codes
 - Role-based access control: 9 predefined roles, custom roles, granular permissions (`config/rbac.php`), privilege-escalation guards
 - User administration; immutable, redacted audit log with correlation IDs; unauthorized (403) / error pages
 - Reusable Blade components (KPI card, inputs, table, pagination, modal, confirm form, alerts)
 
-## Phase 2 — core salon operations
+### Phase 2 — core salon operations
 - **Customers:** register / edit / search / archive, auto customer numbers, duplicate-phone warning, preferences, restricted allergy & medical notes
   (`customers.sensitive`), appointment history, birthday-month and marketing-consent filters, audited CSV export, privacy erasure (anonymise) action.
   Marketing consent is recorded explicitly (default: no consent). Purchases, loyalty and lifetime value appear when POS/loyalty land.
@@ -39,7 +238,7 @@ shift existing rows, so set it before going live.
 
 **Calendar:** uses FullCalendar from a pinned CDN URL (jsDelivr). The browser needs internet access to load it (as for Bootstrap).
 
-## Phase 3 — POS and finance
+### Phase 3 — POS and finance
 - **POS checkout** (`/pos`): search a customer, add services (or open a booked appointment's *Checkout*), assign the provider per line, quantities, authorised discounts,
   tax, split payments (cash / card / bank transfer / mobile money; methods are rows in `payment_methods`), partial payments and sales on account, draft sales, printable receipts.
   Totals shown in the browser are for display only: the **server re-prices every cart** from the catalogue / booked line (the browser cannot set prices, tax or totals).
@@ -67,7 +266,7 @@ The migration seeds four payment methods and one drawer ("Main drawer"); add mor
 
 **Daily routine:** cashier opens a drawer session → takes sales/payments → at shift end counts the drawer and closes the session → manager reviews *Daily Summary*.
 
-## Phase 4 — inventory and procurement
+### Phase 4 — inventory and procurement
 - **Products** (SKU, optional barcode, category, supplier, unit of measure, selling price + tax, reorder level, expiry, sellable vs consumable) with search and low-stock / expiring / inactive filters.
   Quantity and cost can **not** be typed into a product: stock only moves through the ledger.
 - **Immutable stock ledger** (`stock_movements`): every change is one append-only row (type, signed quantity, balance after, unit cost, reference, user, reason) written together with the balance under a row lock.
@@ -85,7 +284,7 @@ Transactions also retry automatically when MySQL reports a deadlock (`App\Suppor
 
 **Upgrading from Phase 3:** `php artisan migrate && php artisan salon:sync-permissions` (new permission `inventory.costs`; grant it to roles that should see costs).
 
-## Phase 5 — HR and CRM extensions
+### Phase 5 — HR and CRM extensions
 - **Attendance & leave:** clock in/out (self-service via `attendance.self`, or recorded by HR), manual correction with reason, monthly summaries; leave requests (annual/sick/unpaid/other) with approval; approved leave blocks the employee in availability and booking.
 - **Commissions:** the rule (service/product, percent or fixed, per employee override) and rate are **snapshotted** on each commission row. Base = line net after discounts, before tax. Accrues when the invoice is issued (or when fully paid — *Settings › HR*); refunds and voids adjust proportionally via append-only adjustment rows. Statement, CSV export (formula-injection guarded) and a "my commissions" page for stylists.
 - **Loyalty:** an append-only points ledger. Points are earned when an invoice is **fully paid**, on net spend (excluding tax, memberships and the part paid with points) × earn rate × membership multiplier. Points are redeemed as a payment method (`loyalty`, no cash drawer movement); refunds claw back earned points (never below zero balance). VIP threshold drives the *VIP* segment.
@@ -96,7 +295,7 @@ Transactions also retry automatically when MySQL reports a deadlock (`App\Suppor
 
 **Upgrading from Phase 4:** `php artisan migrate && php artisan salon:sync-permissions` (new permissions `attendance.self`, `leave.request`, `commissions.own`, `pos.void`, `pos.discount_unlimited`; cashiers no longer have `pos.close`).
 
-## Phase 6 — reporting, finance, settings and notifications
+### Phase 6 — reporting, finance, settings and notifications
 - **Dashboard:** operational tiles by permission (today's appointments, next appointments, new customers, low stock, expenses and leave awaiting decision) and, for `dashboard.financials`, a date-range filtered *Business performance* block: **revenue** (invoiced excl. tax, net of refunds), **cash collected** (received less refunded), **refunds**, **expenses** (approved + commissions) and **estimated profit** are shown separately because they differ. Charts use Chart.js from a CDN (pinned version); if the CDN is unreachable the figures still show.
 - **Expenses:** categories (Rent, Salaries, Utilities, Supplies, Marketing, Maintenance, Transport, Other — editable), submit → approve / reject (reason required) / cancel, mark paid (method, date, reference), append-only approval history, optional receipt (JPG/PNG/PDF ≤ 5 MB) stored on the **private** disk under a random name and served only through an authorised route. Nobody approves their own expense unless *Settings › General* allows it (Super Administrators always may).
 - **Financial summary** (`/finance`): net sales, tax, sales returns, net revenue, cash received/refunded, receivables, cost of goods (stock ledger unit cost), gross profit, approved expenses, commissions and net operating result, with CSV export. It is a management view derived from operational records, **not a double-entry ledger**; commissions are listed separately — if payroll expenses already include commissions, exclude one to avoid counting twice.
@@ -107,48 +306,3 @@ Transactions also retry automatically when MySQL reports a deadlock (`App\Suppor
 
 **Upgrading from Phase 5:** `php artisan migrate && php artisan salon:sync-permissions`, then `php artisan storage:link` if you want a logo. Timestamps of append-only records are now set by the application (not the database clock), so they follow the salon timezone.
 
-## Prerequisites
-PHP 8.3+ with extensions: `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl`, `gd` recommended); Composer 2; MySQL 8.
-Bootstrap and Bootstrap Icons (and later Chart.js) load from pinned CDN URLs — no Node build is needed.
-
-## Install (Windows + XAMPP)
-1. Start **Apache** and **MySQL** in the XAMPP control panel.
-2. Open phpMyAdmin (`http://localhost/phpmyadmin`) → *New* → create database `salon_mana`, collation `utf8mb4_unicode_ci`.
-   (Optionally create a user `salon_app` with privileges on that database only.)
-3. In a terminal in the project folder:
-   ```
-   composer install
-   copy .env.example .env
-   php artisan key:generate
-   ```
-4. Edit `.env`: set `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` (XAMPP default is `root` with an empty password — local use only).
-5. ```
-   php artisan migrate --seed
-   php artisan salon:create-admin
-   php artisan serve
-   ```
-   `migrate --seed` creates roles and permissions only. **No default user or password exists**; `salon:create-admin`
-   prompts for the first Super Administrator's name, email and password.
-6. Open `http://127.0.0.1:8000` and sign in.
-
-Linux/macOS: use `cp` instead of `copy`.
-
-## Roles
-Super Administrator (everything), Salon Owner, Salon Manager, Receptionist, Stylist / Beautician, Cashier, Inventory Manager, Accountant, HR Officer.
-Defaults are least-privilege and editable under *Roles & Permissions*. After upgrades run `php artisan salon:sync-permissions` to register new
-permissions (existing roles keep their customised assignments; grant new permissions in the UI).
-
-## Tests
-Tests use an in-memory SQLite database (never your real database):
-```
-php artisan test
-```
-**Verification caveat:** no MySQL server was available in the development container, so migrations have been run on SQLite only.
-Run `php artisan migrate` on MySQL 8 as part of installation.
-
-## Mail / password reset
-`MAIL_MAILER=log` by default: reset links are written to `storage/logs/laravel.log`. Configure SMTP in `.env` for real delivery.
-
-## Security notes
-Passwords hashed, CSRF on all forms, output escaped, login & 2FA throttling, session regeneration on login, encrypted sessions,
-secrets only in `.env`. In production set `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_SECURE_COOKIE=true` and serve over HTTPS.

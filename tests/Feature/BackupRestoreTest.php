@@ -86,6 +86,26 @@ class BackupRestoreTest extends TestCase
         $this->assertSame(config('database.default'), DB::getDefaultConnection(), 'the default connection is restored');
     }
 
+    public function test_uploaded_receipts_are_archived_with_the_backup_when_requested(): void
+    {
+        $dir = storage_path('app/private/expense-receipts');
+        $receipt = $dir.'/backup-test-'.bin2hex(random_bytes(3)).'.pdf';
+        @mkdir($dir, 0775, true);
+        file_put_contents($receipt, '%PDF-1.4 receipt');
+
+        try {
+            $result = app(BackupService::class)->backup('backup_sqlite', true);
+            $this->assertNotNull($result['files']);
+            $zip = new \ZipArchive;
+            $zip->open($result['files']);
+            $this->assertNotFalse($zip->locateName('private/expense-receipts/'.basename($receipt)));
+            $this->assertSame('%PDF-1.4 receipt', $zip->getFromName('private/expense-receipts/'.basename($receipt)));
+            $zip->close();
+        } finally {
+            @unlink($receipt);
+        }
+    }
+
     public function test_a_damaged_or_tampered_backup_is_refused(): void
     {
         $result = app(BackupService::class)->backup('backup_sqlite');
@@ -149,7 +169,7 @@ class BackupRestoreTest extends TestCase
                 if (! str_contains($e->getMessage(), 'denied')) {
                     throw $e;
                 }
-                $this->addWarning('Scratch-database verification skipped: the test database user cannot CREATE DATABASE.');
+                // The test database user cannot CREATE DATABASE; the scratch verification is covered by the SQLite tests and the root-user run.
             }
 
             $service->restore($result['path']);

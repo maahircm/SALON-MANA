@@ -28,10 +28,13 @@ class CustomerController extends Controller
     {
         $this->authorize('customers.view');
         $query = $this->filtered($request)->with('preferredEmployee:id,name');
-        if ($request->user()->can('pos.invoices')) {
-            $query->addSelect(['customers.*', 'ltv' => Invoice::query()->selectRaw('COALESCE(SUM(amount_paid - refunded_total), 0)')->whereColumn('customer_id', 'customers.id')->where('status', Invoice::STATUS_ISSUED)]);
-        }
         $customers = $query->orderBy('name')->paginate(15)->withQueryString();
+        if ($request->user()->can('pos.invoices')) {
+            // Lifetime value for the visible page only: a per-row subquery in the main query is evaluated for every customer before paging.
+            $ltv = Invoice::query()->whereIn('customer_id', $customers->pluck('id'))->where('status', Invoice::STATUS_ISSUED)
+                ->selectRaw('customer_id, SUM(amount_paid - refunded_total) as value')->groupBy('customer_id')->pluck('value', 'customer_id');
+            $customers->getCollection()->each(fn (Customer $c) => $c->setAttribute('ltv', $ltv[$c->id] ?? 0));
+        }
 
         return view('customers.index', compact('customers'));
     }

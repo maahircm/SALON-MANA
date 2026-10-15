@@ -4,7 +4,9 @@ if (! function_exists('money')) {
     /** Format a decimal string/number as salon currency (display only; never used for arithmetic). */
     function money(string|int|float|null $amount): string
     {
-        return config('salon.currency_symbol').number_format((float) $amount, 2);
+        $value = round((float) $amount, 2);
+
+        return ($value < 0 ? '-' : '').config('salon.currency_symbol').number_format(abs($value), 2);
     }
 }
 

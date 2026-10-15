@@ -36,7 +36,7 @@ container; everything not run is listed under "Not verified". Numbers are from t
 | Run | Result |
 |---|---|
 | Whole suite, SQLite (in-memory), `php artisan test` | **393 tests: 387 passed, 6 skipped** (the 6 are the MySQL-only tests), 2,782 assertions |
-| Whole suite, MySQL 8.0.46 (`salon_mana_test`) | **392 of 392 passed, 0 skipped** (run before the last two small tests — money formatting and file-archive — were added; those two pass on SQLite) |
+| Whole suite, MySQL 8.0.46 (`salon_mana_test`) | **393 of 393 passed, 0 skipped**, 2,861 assertions (final run, including the MySQL-only race and mysqldump tests) |
 | MySQL-only group (`--group=mysql`): 5 race tests with 10 real parallel PHP processes + `mysqldump` round trip | passed |
 | Backup → tamper → restore → scratch-database verify (SQLite temp file and real MySQL) | passed; a damaged archive is refused by checksum |
 | Code style | `vendor/bin/pint` clean |

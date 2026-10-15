@@ -20,7 +20,7 @@ class NotificationLog extends Model
     /** @var array<string, string> */
     public const TYPES = [
         'booking_confirmation' => 'Booking confirmation', 'booking_cancellation' => 'Booking cancellation', 'appointment_reminder' => 'Appointment reminder',
-        'payment_reminder' => 'Payment reminder', 'birthday' => 'Birthday greeting', 'low_stock' => 'Low-stock alert',
+        'payment_reminder' => 'Payment reminder', 'birthday' => 'Birthday greeting', 'low_stock' => 'Low-stock alert', 'integrity' => 'Data integrity alert',
     ];
 
     protected $guarded = [];

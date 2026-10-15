@@ -9,11 +9,13 @@ use App\Services\SettingsService;
 use App\Services\Sms\LogSmsGateway;
 use App\Support\RuntimeSettings;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -32,6 +34,14 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Behind a TLS-terminating proxy the request looks like http; APP_URL decides the scheme of generated links.
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
+
+        // Hidden N+1 queries fail the test suite (and local development) instead of silently slowing production.
+        Model::preventLazyLoading(! $this->app->isProduction());
+
         Paginator::useBootstrapFive();
 
         RuntimeSettings::apply($this->app->make(SettingsService::class));

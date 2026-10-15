@@ -15,10 +15,18 @@ return [
     'receipt' => ['paper' => '80mm', 'show_logo' => true, 'show_tax_number' => true, 'show_cashier' => true],
     'finance' => ['expense_self_approval' => false, 'expense_prefix' => 'EXP-'],
 
+    // Backups (php artisan salon:backup). Binary paths are only needed when the tools are not on PATH (e.g. C:\xampp\mysql\bin\mysqldump.exe).
+    'backup' => [
+        'directory' => env('BACKUP_DIRECTORY', storage_path('app/backups')),
+        'mysqldump' => env('MYSQLDUMP_PATH', 'mysqldump'),
+        'mysql' => env('MYSQL_CLIENT_PATH', 'mysql'),
+        'keep' => (int) env('BACKUP_KEEP', 14),
+    ],
+
     // Settings > Notifications (stored in salon_settings as notifications.channels.* / notifications.events.* / flat keys).
     'notifications' => [
         'channels' => ['email' => true, 'sms' => false, 'in_app' => true],
-        'events' => ['booking_confirmation' => true, 'booking_cancellation' => true, 'appointment_reminder' => true, 'low_stock' => true, 'payment_reminder' => false, 'birthday' => false],
+        'events' => ['booking_confirmation' => true, 'booking_cancellation' => true, 'appointment_reminder' => true, 'low_stock' => true, 'payment_reminder' => false, 'birthday' => false, 'integrity' => true],
         'payment_reminder_after_days' => 3,
         'payment_reminder_repeat_days' => 7,
         'payment_reminder_max' => 3,

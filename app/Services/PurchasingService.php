@@ -116,7 +116,7 @@ class PurchasingService
             if (! $order->canReceive()) {
                 throw ValidationException::withMessages(['order' => 'Goods can only be received against an ordered purchase order.']);
             }
-            $items = $order->items()->lockForUpdate()->get()->keyBy('id');
+            $items = $order->items()->with('product:id,name')->lockForUpdate()->get()->keyBy('id');
             $lines = [];
             $errors = [];
             foreach ($received as $itemId => $row) {

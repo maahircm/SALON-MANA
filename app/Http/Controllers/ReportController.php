@@ -25,7 +25,7 @@ class ReportController extends Controller
 
     public function show(Request $request, string $report): View
     {
-        $definition = $this->definition($request, $report);
+        $definition = $this->authorizedDefinition($request, $report);
         $range = DateRange::fromRequest($request);
         $period = $this->period($request);
         $rows = $this->catalog->rows($report, $range, $period);
@@ -42,7 +42,7 @@ class ReportController extends Controller
 
     public function export(Request $request, string $report, AuditLogger $audit): StreamedResponse
     {
-        $definition = $this->definition($request, $report);
+        $definition = $this->authorizedDefinition($request, $report);
         $this->authorize('reports.export');
         $range = DateRange::fromRequest($request);
         $rows = $this->catalog->rows($report, $range, $this->period($request));
@@ -60,7 +60,7 @@ class ReportController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function definition(Request $request, string $report): array
+    private function authorizedDefinition(Request $request, string $report): array
     {
         $definition = $this->catalog->definitions()[$report] ?? null;
         abort_if($definition === null, 404);

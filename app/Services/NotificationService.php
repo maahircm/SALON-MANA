@@ -116,7 +116,7 @@ class NotificationService
             return 0;
         }
         $count = 0;
-        foreach (User::query()->where('is_active', true)->get() as $user) {
+        foreach (User::query()->where('is_active', true)->with('roles')->get() as $user) {
             if (! $user->can($permission)) {
                 continue;
             }

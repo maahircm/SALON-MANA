@@ -8,6 +8,7 @@ use App\Models\AppointmentService;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Support\Atomic;
 use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,7 @@ class CheckoutService
         private DocumentNumberService $numbers,
         private SettingsService $settings,
         private AuditLogger $audit,
+        private InventoryService $inventory,
     ) {}
 
     /**
@@ -29,7 +31,7 @@ class CheckoutService
      */
     public function saveDraft(array $data, User $actor): Invoice
     {
-        return DB::transaction(function () use ($data, $actor) {
+        return Atomic::run(function () use ($data, $actor) {
             $invoice = $this->resolveDraft($data['draft_id'] ?? null, $actor);
             $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id);
             $appointment = $this->appointmentFor($priced['lines']);
@@ -79,11 +81,12 @@ class CheckoutService
      */
     private function issue(array $data, User $actor, string $key): Invoice
     {
-        return DB::transaction(function () use ($data, $actor, $key) {
+        return Atomic::run(function () use ($data, $actor, $key) {
             $invoice = $this->resolveDraft($data['draft_id'] ?? null, $actor);
             $priced = $this->pricing->price($data['items'] ?? [], $actor, $invoice?->id);
             $appointment = $this->appointmentFor($priced['lines']);
             $customer = $this->customer($appointment?->customer_id ?? ($data['customer_id'] ?? null), $data['customer_id'] ?? null);
+            $this->inventory->lockForSale($priced['lines']);
             $payments = array_values(array_filter($data['payments'] ?? [], fn ($p) => filled($p['amount'] ?? null) && (float) $p['amount'] > 0));
 
             $paying = $payments === [] ? '0.00' : Money::add(...array_map(fn ($p) => $this->amountOrFail($p['amount']), $payments));
@@ -114,6 +117,9 @@ class CheckoutService
                 'issued_at' => now(),
                 'issued_by' => $actor->id,
             ])->save();
+
+            // Retail goods and service consumables leave stock in the same transaction as the sale.
+            $this->inventory->deductForInvoice($invoice, $actor);
 
             if ($payments !== []) {
                 $this->payments->record($invoice, $payments, $actor, $key);

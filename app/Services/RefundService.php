@@ -10,6 +10,7 @@ use App\Models\PaymentMethod;
 use App\Models\Refund;
 use App\Models\RefundItem;
 use App\Models\User;
+use App\Support\Atomic;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -23,12 +24,13 @@ use Illuminate\Validation\ValidationException;
  */
 class RefundService
 {
-    public function __construct(private CashDrawerService $drawers, private DocumentNumberService $numbers, private AuditLogger $audit) {}
+    public function __construct(private CashDrawerService $drawers, private DocumentNumberService $numbers, private AuditLogger $audit, private InventoryService $inventory) {}
 
     /**
      * @param  array<int|string, int|string>  $quantities  invoice_item_id => quantity to refund
+     * @param  array<int|string, mixed>  $restock  invoice_item_id => truthy to return refunded retail goods to stock
      */
-    public function refund(Invoice $invoice, array $quantities, PaymentMethod $method, string $reason, ?string $reference, string $idempotencyKey, User $actor): Refund
+    public function refund(Invoice $invoice, array $quantities, PaymentMethod $method, string $reason, ?string $reference, string $idempotencyKey, User $actor, array $restock = []): Refund
     {
         if (! $actor->can('pos.refund')) {
             abort(403, 'You are not allowed to process refunds.');
@@ -37,7 +39,7 @@ class RefundService
             throw ValidationException::withMessages(['reason' => 'A refund reason is required.']);
         }
 
-        return DB::transaction(function () use ($invoice, $quantities, $method, $reason, $reference, $idempotencyKey, $actor) {
+        return Atomic::run(function () use ($invoice, $quantities, $method, $reason, $reference, $idempotencyKey, $actor, $restock) {
             if ($existing = Refund::where('idempotency_key', $idempotencyKey)->first()) {
                 if ($existing->invoice_id !== $invoice->id) {
                     throw ValidationException::withMessages(['idempotency_key' => 'This refund reference was already used for another invoice.']);
@@ -79,8 +81,12 @@ class RefundService
                 'refunded_by' => $actor->id,
                 'refunded_at' => now(),
             ]);
+            $invoiceItems = $invoice->items()->get()->keyBy('id');
             foreach ($lines as $line) {
-                RefundItem::create(['refund_id' => $refund->id] + $line);
+                $refundItem = RefundItem::create(['refund_id' => $refund->id] + $line);
+                if (! empty($restock[$line['invoice_item_id']])) {
+                    $this->inventory->restockRefundedItem($invoiceItems[$line['invoice_item_id']], $refundItem, $actor);
+                }
             }
             $invoice->forceFill(['refunded_total' => Money::add((string) $invoice->refunded_total, $amount), 'updated_by' => $actor->id])->save();
 

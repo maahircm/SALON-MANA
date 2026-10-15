@@ -13,6 +13,7 @@ use App\Services\AppointmentBookingService;
 use App\Services\AppointmentStatusService;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Tests\Concerns;
 use Tests\TestCase;
@@ -189,7 +190,7 @@ class CheckoutTest extends TestCase
 
         $this->actingAs($cashier)->post('/pos', $this->checkoutPayload([$this->line($service->id)], [$this->cashPayment('100.00')]))->assertSessionHasErrors('session');
         $this->assertSame(0, Invoice::count());
-        $this->assertDatabaseCount('document_sequences', 0);
+        $this->assertSame(0, (int) DB::table('document_sequences')->where('key', 'invoice')->value('last_number'), 'a rolled-back sale must not consume an invoice number');
     }
 
     public function test_overpayment_is_rejected(): void

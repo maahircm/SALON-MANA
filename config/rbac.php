@@ -57,11 +57,12 @@ return [
             'pos.close' => 'Review all drawer sessions, close others\' sessions, daily summary',
         ],
         'Inventory' => [
-            'inventory.view' => 'View products and stock',
+            'inventory.view' => 'View products and stock levels',
+            'inventory.costs' => 'View cost prices and inventory valuation',
             'inventory.manage' => 'Manage products and categories',
             'inventory.suppliers' => 'Manage suppliers',
             'inventory.purchasing' => 'Manage purchase orders / receipts',
-            'inventory.adjust' => 'Adjust stock',
+            'inventory.adjust' => 'Adjust stock, record damage / expiry',
         ],
         'Finance' => [
             'expenses.view' => 'View expenses',
@@ -99,7 +100,7 @@ return [
         'manager' => ['name' => 'Salon Manager', 'permissions' => [
             'dashboard.*', 'customers.*', 'services.*', 'appointments.*', 'employees.view',
             'employees.schedule', 'employees.attendance', 'employees.leave', 'pos.use', 'pos.discount', 'pos.invoices',
-            'pos.refund', 'pos.void', 'pos.drawer', 'pos.close', 'inventory.view', 'inventory.adjust', 'expenses.view', 'expenses.create',
+            'pos.refund', 'pos.void', 'pos.drawer', 'pos.close', 'inventory.view', 'inventory.costs', 'inventory.adjust', 'expenses.view', 'expenses.create',
             'loyalty.*', 'reports.view', 'reports.export',
         ]],
         'receptionist' => ['name' => 'Receptionist', 'permissions' => [
@@ -120,7 +121,7 @@ return [
         ]],
         'accountant' => ['name' => 'Accountant', 'permissions' => [
             'dashboard.view', 'dashboard.financials', 'pos.invoices', 'expenses.*', 'finance.view',
-            'reports.view', 'reports.financial', 'reports.export', 'inventory.view',
+            'reports.view', 'reports.financial', 'reports.export', 'inventory.view', 'inventory.costs',
         ]],
         'hr-officer' => ['name' => 'HR Officer', 'permissions' => [
             'dashboard.view', 'employees.*',

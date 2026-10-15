@@ -7,6 +7,7 @@ use App\Models\AppointmentService;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Product;
 use App\Models\Service;
 use App\Models\User;
 use App\Support\Money;
@@ -21,7 +22,7 @@ class InvoicePricingService
     public function __construct(private SettingsService $settings) {}
 
     /**
-     * @param  array<int, array{service_id?: int|string|null, appointment_service_id?: int|string|null, quantity?: int|string, employee_id?: int|string|null, discount_type?: string|null, discount_value?: string|null}>  $items
+     * @param  array<int, array{service_id?: int|string|null, product_id?: int|string|null, appointment_service_id?: int|string|null, quantity?: int|string, employee_id?: int|string|null, discount_type?: string|null, discount_value?: string|null}>  $items
      * @return array{lines: array<int, array<string, mixed>>, subtotal: string, discount_total: string, tax_total: string, total: string, discount_override: bool}
      */
     public function price(array $items, User $actor, ?int $ignoreInvoiceId = null): array
@@ -66,6 +67,8 @@ class InvoicePricingService
         $quantity = (int) ($item['quantity'] ?? 1);
         $employeeId = ($item['employee_id'] ?? null) ?: null;
         $serviceId = ($item['service_id'] ?? null) ?: null;
+        $productId = ($item['product_id'] ?? null) ?: null;
+        $itemType = 'service';
         $appointmentServiceId = ($item['appointment_service_id'] ?? null) ?: null;
 
         if ($appointmentServiceId !== null) {
@@ -87,11 +90,24 @@ class InvoicePricingService
             }
             $seenAppointmentLines[$booked->id] = true;
             $quantity = 1;
+            $productId = null;
             $serviceId = $booked->service_id;
             $employeeId ??= $booked->employee_id;
             $description = $booked->service_name;
             $unitPrice = (string) $booked->unit_price;
             $taxRate = (string) $booked->tax_rate;
+        } elseif ($productId !== null) {
+            $product = Product::find($productId);
+            if (! $product || ! $product->is_active || ! $product->is_sellable) {
+                $errors["items.$i.product_id"] = 'Choose an active product that is available for sale.';
+
+                return null;
+            }
+            $itemType = 'product';
+            $serviceId = null;
+            $description = $product->name;
+            $unitPrice = (string) $product->selling_price;
+            $taxRate = (string) $product->tax_rate;
         } else {
             $service = $serviceId ? Service::find($serviceId) : null;
             if (! $service || ! $service->is_active) {
@@ -124,8 +140,9 @@ class InvoicePricingService
         $tax = Money::percent($net, $taxRate);
 
         return [
-            'item_type' => 'service',
+            'item_type' => $itemType,
             'service_id' => $serviceId,
+            'product_id' => $productId,
             'appointment_service_id' => $appointmentServiceId,
             'employee_id' => $employeeId,
             'description' => $description,

@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
 use App\Models\User;
+use App\Support\Atomic;
 use App\Support\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ class PaymentService
      */
     public function addPayments(Invoice $invoice, array $payments, User $actor, string $idempotencyKey): Collection
     {
-        return DB::transaction(function () use ($invoice, $payments, $actor, $idempotencyKey) {
+        return Atomic::run(function () use ($invoice, $payments, $actor, $idempotencyKey) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
             return $this->record($invoice, $payments, $actor, $idempotencyKey);

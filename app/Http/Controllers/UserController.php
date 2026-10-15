@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -47,7 +47,7 @@ class UserController extends Controller
         ]);
         $roleIds = $this->validatedRoleIds($request, $data['roles'] ?? []);
 
-        $user = DB::transaction(function () use ($data, $roleIds) {
+        $user = Atomic::run(function () use ($data, $roleIds) {
             $user = new User(collect($data)->only(['name', 'email', 'phone', 'password'])->all());
             $user->email = strtolower($user->email);
             $user->forceFill(['must_change_password' => true, 'is_active' => true, 'password_changed_at' => now()])->save();

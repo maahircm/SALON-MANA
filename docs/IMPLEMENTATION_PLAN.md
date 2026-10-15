@@ -38,8 +38,13 @@ Decisions
 - [x] Financial audit trail; events for later modules; POS settings
 - Deferred by design: retail product lines (Phase 4), commissions / loyalty (Phase 5), expenses & profit (Phase 6), payment gateways (needs provider credentials).
 
-## Phase 4 — Inventory and procurement
-Products, suppliers, POs, goods receipt, immutable stock ledger, consumables.
+## Phase 4 — Inventory and procurement  [DONE]
+- [x] Products, categories, suppliers, immutable stock ledger, reconciliation
+- [x] Purchase orders, goods receipts (weighted-average cost), supplier returns, adjustments, damage / expiry
+- [x] POS product lines, atomic deduction, service consumables, restock on refund, reversal on void
+- [x] Valuation, cost visibility permission, inventory settings
+- [x] Verified on real MySQL 8 incl. parallel-process race tests (found and fixed double-booking + deadlocks)
+
 ## Phase 5 — HR and CRM extensions
 Attendance, leave, commissions, loyalty, memberships, promotions, reminders.
 ## Phase 6 — Reporting and administration

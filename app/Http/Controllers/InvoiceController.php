@@ -87,8 +87,10 @@ class InvoiceController extends Controller
             'reference' => ['nullable', 'string', 'max:100'],
             'quantities' => ['required', 'array'],
             'quantities.*' => ['nullable', 'integer', 'min:0', 'max:99'],
+            'restock' => ['nullable', 'array'],
+            'restock.*' => ['nullable', 'boolean'],
         ]);
-        $refund = $refunds->refund($invoice, $data['quantities'], PaymentMethod::findOrFail($data['payment_method_id']), $data['reason'], $data['reference'] ?? null, $data['idempotency_key'], $request->user());
+        $refund = $refunds->refund($invoice, $data['quantities'], PaymentMethod::findOrFail($data['payment_method_id']), $data['reason'], $data['reference'] ?? null, $data['idempotency_key'], $request->user(), $data['restock'] ?? []);
 
         return redirect()->route('invoices.show', $invoice)->with('success', "Refund {$refund->refund_number} of ".money($refund->amount).' recorded.');
     }

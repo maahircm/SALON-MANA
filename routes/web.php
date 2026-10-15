@@ -10,18 +10,27 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
+use App\Http\Controllers\InventorySettingsController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosSettingsController;
+use App\Http\Controllers\ProductCategoryController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\ServiceAddonController;
 use App\Http\Controllers\ServiceCategoryController;
+use App\Http\Controllers\ServiceConsumableController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ServicePackageController;
 use App\Http\Controllers\SkillController;
+use App\Http\Controllers\StockAdjustmentController;
+use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierReturnController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -136,4 +145,33 @@ Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
 
     Route::get('settings/pos', [PosSettingsController::class, 'edit'])->name('settings.pos');
     Route::put('settings/pos', [PosSettingsController::class, 'update'])->name('settings.pos.update');
+});
+
+// ---- Phase 4: inventory and procurement ----
+Route::middleware(['auth', 'active', 'password.fresh'])->group(function () {
+    Route::get('inventory/categories', [ProductCategoryController::class, 'index'])->name('product-categories.index');
+    Route::post('inventory/categories', [ProductCategoryController::class, 'store'])->name('product-categories.store');
+    Route::put('inventory/categories/{productCategory}', [ProductCategoryController::class, 'update'])->name('product-categories.update');
+    Route::delete('inventory/categories/{productCategory}', [ProductCategoryController::class, 'destroy'])->name('product-categories.destroy');
+    Route::resource('inventory/products', ProductController::class)->names('products');
+    Route::resource('inventory/suppliers', SupplierController::class)->except(['destroy']);
+
+    Route::post('inventory/purchase-orders/{order}/place', [PurchaseOrderController::class, 'place'])->name('purchase-orders.place');
+    Route::post('inventory/purchase-orders/{order}/cancel', [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel');
+    Route::post('inventory/purchase-orders/{order}/close', [PurchaseOrderController::class, 'close'])->name('purchase-orders.close');
+    Route::post('inventory/purchase-orders/{order}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
+    Route::resource('inventory/purchase-orders', PurchaseOrderController::class)->except(['destroy'])->parameters(['purchase-orders' => 'order'])->names('purchase-orders');
+
+    Route::get('inventory/movements', [StockMovementController::class, 'index'])->name('movements.index');
+    Route::get('inventory/valuation', [StockMovementController::class, 'valuation'])->name('inventory.valuation');
+    Route::get('inventory/adjustments', [StockAdjustmentController::class, 'index'])->name('adjustments.index');
+    Route::post('inventory/adjustments', [StockAdjustmentController::class, 'store'])->middleware('throttle:sensitive')->name('adjustments.store');
+    Route::get('inventory/returns', [SupplierReturnController::class, 'index'])->name('supplier-returns.index');
+    Route::post('inventory/returns', [SupplierReturnController::class, 'store'])->middleware('throttle:sensitive')->name('supplier-returns.store');
+
+    Route::post('services/{service}/consumables', [ServiceConsumableController::class, 'store'])->name('services.consumables.store');
+    Route::delete('services/{service}/consumables/{consumable}', [ServiceConsumableController::class, 'destroy'])->name('services.consumables.destroy');
+
+    Route::get('settings/inventory', [InventorySettingsController::class, 'edit'])->name('settings.inventory');
+    Route::put('settings/inventory', [InventorySettingsController::class, 'update'])->name('settings.inventory.update');
 });

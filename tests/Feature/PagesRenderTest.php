@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Models\ProductCategory;
 use App\Models\Room;
+use App\Models\ServiceConsumable;
 use App\Models\ServicePackage;
 use App\Models\Skill;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Services\AppointmentBookingService;
+use App\Services\PurchasingService;
+use App\Services\StockAdjustmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns;
 use Tests\TestCase;
@@ -63,5 +68,45 @@ class PagesRenderTest extends TestCase
         $this->assertStringNotContainsString('Roles &amp; Permissions', $html);
         $this->assertStringNotContainsString('Booking Settings', $html);
         $this->assertStringNotContainsString('Audit Log', $html);
+    }
+
+    public function test_every_inventory_screen_renders_with_realistic_data(): void
+    {
+        $admin = User::factory()->superAdmin()->create();
+        $supplier = Supplier::factory()->create();
+        $category = ProductCategory::factory()->create();
+        $product = $this->stockedProduct('10', '5.00', ['product_category_id' => $category->id, 'supplier_id' => $supplier->id, 'reorder_level' => '20', 'barcode' => '5901234123457', 'expiry_date' => now()->addDays(5)->toDateString()]);
+        $dye = $this->stockedProduct('50', '0.10', ['unit' => 'ml', 'is_sellable' => false]);
+        $service = $this->service(60, '30.00');
+        ServiceConsumable::create(['service_id' => $service->id, 'product_id' => $dye->id, 'quantity' => '20']);
+        $purchasing = app(PurchasingService::class);
+        $draft = $purchasing->saveDraft(null, ['supplier_id' => $supplier->id], [$product->id => ['quantity' => '5', 'unit_cost' => '4.00']], $admin);
+        $placed = $purchasing->place($purchasing->saveDraft(null, ['supplier_id' => $supplier->id], [$product->id => ['quantity' => '8', 'unit_cost' => '4.50']], $admin), $admin);
+        $purchasing->receive($placed, [$placed->items->first()->id => ['quantity' => '3', 'expiry_date' => '2027-01-01']], 'DN-1', null, $admin);
+        app(StockAdjustmentService::class)->adjust($product, 'damaged', '1', 'Dropped', $admin);
+        app(StockAdjustmentService::class)->returnToSupplier($supplier, $product, '1', 'Faulty', $admin);
+
+        $urls = ['/inventory/products', '/inventory/products?status=low', '/inventory/products?status=expiring&q=SKU', '/inventory/products/create', "/inventory/products/{$product->id}", "/inventory/products/{$product->id}/edit",
+            '/inventory/categories', '/inventory/suppliers', '/inventory/suppliers/create', "/inventory/suppliers/{$supplier->id}", "/inventory/suppliers/{$supplier->id}/edit",
+            '/inventory/purchase-orders', '/inventory/purchase-orders?status=ordered', '/inventory/purchase-orders/create', "/inventory/purchase-orders/create?supplier={$supplier->id}",
+            "/inventory/purchase-orders/{$draft->id}", "/inventory/purchase-orders/{$draft->id}/edit", "/inventory/purchase-orders/{$placed->id}",
+            '/inventory/movements', "/inventory/movements?product={$product->id}&type=damage&from=2026-01-01", '/inventory/valuation', "/inventory/adjustments?product={$product->id}", '/inventory/returns',
+            '/settings/inventory', "/services/{$service->id}", '/pos'];
+        foreach ($urls as $url) {
+            $this->assertNoNestedForms($this->actingAs($admin)->get($url)->assertOk()->getContent(), $url);
+        }
+        $html = $this->actingAs($admin)->get('/dashboard')->getContent();
+        preg_match_all('/class="nav-item[^"]*" href="([^"]+)"/', $html, $links);
+        foreach ($links[1] as $href) {
+            $this->actingAs($admin)->get($href)->assertOk();
+        }
+        $this->assertStringContainsString('Stock Ledger', $html);
+    }
+
+    public function test_the_sidebar_shows_inventory_screens_by_permission(): void
+    {
+        $plain = $this->actingAs(User::factory()->withPermissions('inventory.view')->create())->get('/dashboard');
+        $plain->assertDontSee('Valuation')->assertDontSee('Purchase Orders')->assertDontSee('Stock Adjustments');
+        $this->actingAs($this->stockKeeper('dashboard.view'))->get('/dashboard')->assertSee('Valuation')->assertSee('Purchase Orders')->assertSee('Stock Adjustments');
     }
 }

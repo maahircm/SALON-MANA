@@ -8,9 +8,9 @@ use App\Models\CashMovement;
 use App\Models\Payment;
 use App\Models\Refund;
 use App\Models\User;
+use App\Support\Atomic;
 use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /** Opening, reconciling and closing cashier drawer sessions. */
@@ -46,7 +46,7 @@ class CashDrawerService
         }
 
         try {
-            return DB::transaction(function () use ($user, $drawer, $openingCash) {
+            return Atomic::run(function () use ($user, $drawer, $openingCash) {
                 if ($this->openSessionFor($user)) {
                     throw ValidationException::withMessages(['session' => 'You already have an open drawer session.']);
                 }
@@ -74,7 +74,7 @@ class CashDrawerService
             throw ValidationException::withMessages(['amount' => 'Enter a positive amount.']);
         }
 
-        return DB::transaction(function () use ($session, $type, $amount, $reason, $actor) {
+        return Atomic::run(function () use ($session, $type, $amount, $reason, $actor) {
             $session = CashDrawerSession::whereKey($session->id)->lockForUpdate()->firstOrFail();
             $this->assertCanOperate($session, $actor);
             $movement = CashMovement::create([
@@ -122,7 +122,7 @@ class CashDrawerService
             throw ValidationException::withMessages(['counted_cash' => 'Counted cash cannot be negative.']);
         }
 
-        return DB::transaction(function () use ($session, $countedCash, $notes, $actor) {
+        return Atomic::run(function () use ($session, $countedCash, $notes, $actor) {
             $session = CashDrawerSession::whereKey($session->id)->lockForUpdate()->firstOrFail();
             $this->assertCanOperate($session, $actor);
 

@@ -6,9 +6,9 @@ use App\Models\Employee;
 use App\Models\EmployeeShift;
 use App\Services\AuditLogger;
 use App\Services\AvailabilityService;
+use App\Support\Atomic;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeScheduleController extends Controller
@@ -75,7 +75,7 @@ class EmployeeScheduleController extends Controller
             }
         }
 
-        DB::transaction(function () use ($employee, $rows) {
+        Atomic::run(function () use ($employee, $rows) {
             $employee->schedules()->delete();
             $employee->schedules()->createMany($rows);
             $this->audit->log('employee.schedule_updated', $employee, null, ['blocks' => count($rows)]);

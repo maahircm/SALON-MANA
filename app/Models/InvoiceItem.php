@@ -46,6 +46,11 @@ class InvoiceItem extends Model
         return $this->belongsTo(Service::class)->withTrashed();
     }
 
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class)->withTrashed();
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class)->withTrashed();

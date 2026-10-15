@@ -7,6 +7,7 @@ use App\Models\AppointmentService;
 use App\Models\Employee;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Answers "when can this stylist / room be booked?". All times are in the salon timezone
@@ -81,18 +82,29 @@ class AvailabilityService
     }
 
     /** True when another active booking overlaps (including the configured buffer) for this employee. */
-    public function employeeHasConflict(int $employeeId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreAppointmentId = null): bool
+    public function employeeHasConflict(int $employeeId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreAppointmentId = null, bool $lock = false): bool
     {
         if ($this->settings->get('booking.allow_stylist_overlap', false)) {
             return false;
         }
 
-        return $this->conflictQuery('employee_id', $employeeId, $start, $end, $ignoreAppointmentId)->exists();
+        return $this->conflicts($this->conflictQuery('employee_id', $employeeId, $start, $end, $ignoreAppointmentId), $lock);
     }
 
-    public function roomHasConflict(int $roomId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreAppointmentId = null): bool
+    public function roomHasConflict(int $roomId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreAppointmentId = null, bool $lock = false): bool
     {
-        return $this->conflictQuery('room_id', $roomId, $start, $end, $ignoreAppointmentId)->exists();
+        return $this->conflicts($this->conflictQuery('room_id', $roomId, $start, $end, $ignoreAppointmentId), $lock);
+    }
+
+    /**
+     * With $lock the check is a locking read (SELECT ... FOR UPDATE). That always sees the latest committed rows,
+     * even when the surrounding transaction's snapshot is older, so two concurrent bookings cannot both pass.
+     *
+     * @param  Builder<AppointmentService>  $query
+     */
+    private function conflicts($query, bool $lock): bool
+    {
+        return $lock ? $query->lockForUpdate()->first() !== null : $query->exists();
     }
 
     private function conflictQuery(string $column, int $id, CarbonInterface $start, CarbonInterface $end, ?int $ignoreId)

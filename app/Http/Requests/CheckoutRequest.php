@@ -27,6 +27,7 @@ class CheckoutRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.service_id' => ['nullable', 'integer'],
+            'items.*.product_id' => ['nullable', 'integer'],
             'items.*.appointment_service_id' => ['nullable', 'integer'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1', 'max:99'],
             'items.*.employee_id' => ['nullable', 'integer'],

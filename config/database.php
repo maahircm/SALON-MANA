@@ -59,8 +59,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // The app takes row locks first and then re-reads (stock, bookings, payments). That pattern needs
+            // READ COMMITTED: under MySQL's default REPEATABLE READ a transaction can keep reading a stale
+            // snapshot after it has waited for a lock, which would allow double-booking and overselling.
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                Mysql::ATTR_INIT_COMMAND => 'SET SESSION TRANSACTION ISOLATION LEVEL '.env('DB_ISOLATION_LEVEL', 'READ COMMITTED'),
             ]) : [],
         ],
 
@@ -81,6 +85,7 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                Mysql::ATTR_INIT_COMMAND => 'SET SESSION TRANSACTION ISOLATION LEVEL '.env('DB_ISOLATION_LEVEL', 'READ COMMITTED'),
             ]) : [],
         ],
 

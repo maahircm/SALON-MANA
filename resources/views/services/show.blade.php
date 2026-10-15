@@ -26,6 +26,12 @@
             <div class="col-md-3"><input class="form-control form-control-sm" type="number" name="duration_minutes" value="0" min="0" aria-label="Minutes"></div>
             <div class="col-md-2"><input class="form-control form-control-sm" type="number" step="0.01" min="0" name="price" placeholder="Price" aria-label="Price" required></div>
             <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100">Add</button></div></form>@endcan</div>
+    @can('inventory.view')<div class="card mb-3"><div class="card-header">Consumables used per service</div><x-table :headers="['Product', 'Quantity per service', '']">
+        @forelse ($service->consumables as $c)<tr><td>{{ $c->product->name }}</td><td>{{ qty($c->quantity) }} {{ $c->product->unit }}</td><td class="text-end">@can('services.manage')<x-confirm-form method="delete" :action="route('services.consumables.destroy', [$service, $c])" message="Remove this consumable?" label="Remove" />@endcan</td></tr>
+        @empty<tr><td colspan="3" class="text-muted">None. Stock is not reduced when this service is invoiced.</td></tr>@endforelse</x-table>
+        @can('services.manage')<form class="row g-2 p-3 border-top" method="post" action="{{ route('services.consumables.store', $service) }}">@csrf
+            <div class="col-md-6"><select class="form-select form-select-sm" name="product_id" aria-label="Product" required><option value="">Product…</option>@foreach ($consumableProducts as $p)<option value="{{ $p->id }}">{{ $p->name }} ({{ $p->unit }})</option>@endforeach</select></div>
+            <div class="col-md-4"><input class="form-control form-control-sm" type="number" step="0.001" min="0.001" name="quantity" placeholder="Quantity" aria-label="Quantity" required></div><div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100">Add</button></div></form>@endcan</div>@endcan
     <div class="card"><div class="card-header">Price history</div><x-table :headers="['When', 'Base price', 'Promo price']">
         @foreach ($service->priceHistories as $h)<tr><td>{{ salon_datetime($h->created_at) }}</td><td>{{ $h->old_base_price !== null ? money($h->old_base_price).' → ' : '' }}{{ money($h->new_base_price) }}</td>
             <td>{{ $h->old_promo_price !== null ? money($h->old_promo_price).' → ' : '' }}{{ $h->new_promo_price !== null ? money($h->new_promo_price) : '—' }}</td></tr>@endforeach</x-table></div>

@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PaymentMethod;
+use App\Models\Product;
 use App\Models\Service;
 use App\Services\CashDrawerService;
 use App\Services\CheckoutService;
@@ -34,7 +35,7 @@ class PosController extends Controller
             $cart = [
                 'draft_id' => $draft->id, 'customer' => $draft->customer, 'notes' => $draft->notes,
                 'items' => $draft->items->map(fn (InvoiceItem $i) => [
-                    'service_id' => $i->service_id, 'appointment_service_id' => $i->appointment_service_id, 'quantity' => $i->quantity, 'employee_id' => $i->employee_id,
+                    'service_id' => $i->service_id, 'product_id' => $i->product_id, 'appointment_service_id' => $i->appointment_service_id, 'quantity' => $i->quantity, 'employee_id' => $i->employee_id,
                     'discount_type' => $i->discount_type, 'discount_value' => (string) $i->discount_value,
                 ])->all(),
             ];
@@ -54,6 +55,7 @@ class PosController extends Controller
         return view('pos.index', [
             'cart' => $cart,
             'services' => Service::with('category:id,name')->where('is_active', true)->orderBy('name')->get(),
+            'products' => Product::where('is_active', true)->where('is_sellable', true)->orderBy('name')->get(['id', 'sku', 'barcode', 'name', 'selling_price', 'tax_rate', 'current_stock', 'unit']),
             'employees' => Employee::where('status', '!=', 'terminated')->orderBy('name')->get(['id', 'name']),
             'methods' => PaymentMethod::where('is_active', true)->orderBy('sort_order')->get(),
             'session' => $drawers->openSessionFor($user),

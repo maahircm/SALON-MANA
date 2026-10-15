@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ServiceRequest;
+use App\Models\Product;
 use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\Skill;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class ServiceController extends Controller
 {
@@ -35,7 +37,7 @@ class ServiceController extends Controller
 
     public function store(ServiceRequest $request)
     {
-        $service = DB::transaction(function () use ($request) {
+        $service = Atomic::run(function () use ($request) {
             $data = $request->validated();
             $service = new Service(collect($data)->only(['service_category_id', 'name', 'description', 'duration_minutes', 'tax_rate', 'required_skill_id'])->all());
             $service->is_active = $request->boolean('is_active');
@@ -52,9 +54,12 @@ class ServiceController extends Controller
     public function show(Service $service)
     {
         $this->authorize('services.view');
-        $service->load('category', 'requiredSkill', 'addons', 'priceHistories');
+        $service->load('category', 'requiredSkill', 'addons', 'priceHistories', 'consumables.product');
+        $consumableProducts = Auth::user()->can('services.manage')
+            ? Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'unit'])
+            : collect();
 
-        return view('services.show', compact('service'));
+        return view('services.show', compact('service', 'consumableProducts'));
     }
 
     public function edit(Service $service)
@@ -66,7 +71,7 @@ class ServiceController extends Controller
 
     public function update(ServiceRequest $request, Service $service)
     {
-        DB::transaction(function () use ($request, $service) {
+        Atomic::run(function () use ($request, $service) {
             $data = $request->validated();
             $oldBase = $service->base_price;
             $oldPromo = $service->promo_price;

@@ -40,6 +40,15 @@ return [
         'receipt_footer' => 'Thank you for visiting!',
     ],
 
+    // Defaults for settings editable under Settings > Inventory (stored in salon_settings).
+    'inventory' => [
+        'allow_negative_stock' => false,
+        'expiry_alert_days' => 30,
+        'purchase_order_prefix' => 'PO-',
+        'goods_receipt_prefix' => 'GR-',
+        'supplier_return_prefix' => 'SR-',
+    ],
+
     'password_min_length' => 10,
     'login_max_attempts' => 5,
     'login_decay_seconds' => 60,

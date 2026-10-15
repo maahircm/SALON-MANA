@@ -2,8 +2,8 @@
 
 Full-stack salon ERP + CRM built with Laravel 13 (PHP 8.3+), MySQL 8, Blade, Bootstrap 5.
 
-> **Status: Phases 1–3 complete (foundation, core salon operations, POS & finance).** Inventory, HR extensions, loyalty and reports
-> are built in later phases — see [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). This README is extended each phase.
+> **Status: Phases 1–4 complete (foundation, core salon operations, POS & finance, inventory & procurement).** HR extensions, loyalty, reports
+> and release hardening follow — see [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). This README is extended each phase.
 
 ## Implemented so far
 - Login/logout, throttling, password reset, activation/deactivation (takes effect immediately), login activity log
@@ -66,6 +66,24 @@ external card/mobile-money gateways (not implemented: record the gateway referen
 The migration seeds four payment methods and one drawer ("Main drawer"); add more under *Cash Drawer › Manage drawers*.
 
 **Daily routine:** cashier opens a drawer session → takes sales/payments → at shift end counts the drawer and closes the session → manager reviews *Daily Summary*.
+
+## Phase 4 — inventory and procurement
+- **Products** (SKU, optional barcode, category, supplier, unit of measure, selling price + tax, reorder level, expiry, sellable vs consumable) with search and low-stock / expiring / inactive filters.
+  Quantity and cost can **not** be typed into a product: stock only moves through the ledger.
+- **Immutable stock ledger** (`stock_movements`): every change is one append-only row (type, signed quantity, balance after, unit cost, reference, user, reason) written together with the balance under a row lock.
+  `php artisan` integrity checks (`InventoryService::reconcile`) compare each balance with the sum of its ledger. Quantities use 3 decimals, money 2.
+  Duplicate deductions are impossible (unique idempotency key per sale line). Negative stock is refused unless enabled in *Settings › Inventory* — then every negative balance is audited.
+- **Purchasing:** suppliers, purchase orders (draft → placed → part/fully received, cancel, close short), goods receipts with supplier reference and expiry. Receiving updates stock and the **weighted-average cost**; over-receipt is refused.
+- **Adjustments:** stock-count correction, damaged, expired, found; **returns to suppliers**. Reason mandatory, `inventory.adjust` / `inventory.purchasing` permissions, audited.
+- **POS integration:** retail products (with barcode entry) can be sold; stock is deducted in the *same transaction* as the invoice, so a sale that cannot be fully supplied is rolled back completely.
+  **Service consumables** (e.g. 30 ml of colour per colouring) are deducted when the service is invoiced. Refunds can return goods to stock at their original cost; voiding an invoice restores whatever has not already been returned.
+- **Valuation** (on-hand × average cost) and the ledger are available to users with `inventory.costs`; cost prices are hidden from everyone else (cashiers see stock, not costs).
+- Not enabled: multiple storage locations / stock transfers (single location by design), batch/lot tracking (one expiry date per product).
+
+**Database isolation level:** the MySQL connection runs in `READ COMMITTED` (`DB_ISOLATION_LEVEL`, set per connection in `config/database.php`; no server change needed). The app locks rows and then re-reads (stock, bookings, invoice numbers); under MySQL's default REPEATABLE READ that pattern allowed double bookings in load tests.
+Transactions also retry automatically when MySQL reports a deadlock (`App\Support\Atomic`).
+
+**Upgrading from Phase 3:** `php artisan migrate && php artisan salon:sync-permissions` (new permission `inventory.costs`; grant it to roles that should see costs).
 
 ## Prerequisites
 PHP 8.3+ with extensions: `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `ctype`, `tokenizer`, `xml`, `curl`, `zip` (`intl`, `gd` recommended); Composer 2; MySQL 8.

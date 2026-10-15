@@ -96,7 +96,7 @@ class CashDrawerTest extends TestCase
         $this->assertSame('closed', $session->status);
         $this->assertSame('125.00', (string) $session->expected_cash);
         $this->assertSame('0.00', (string) $session->variance);
-        $this->assertSame(['Cash' => '25.00', 'Card' => '15.00'], $session->summary['payments_by_method']);
+        $this->assertEquals(['Cash' => '25.00', 'Card' => '15.00'], $session->summary['payments_by_method'], 'JSON key order is not significant');
         $this->assertNull($session->open_drawer_key);
         $this->assertNull($session->open_user_key);
         $this->assertDatabaseHas('audit_logs', ['action' => 'cash_drawer.closed']);

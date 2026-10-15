@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -35,7 +35,7 @@ class RoleController extends Controller
         $this->authorize('roles.manage');
         $data = $this->validated($request);
         $ids = $this->permissionIds($request, $data['permissions'] ?? []);
-        DB::transaction(function () use ($data, $ids) {
+        Atomic::run(function () use ($data, $ids) {
             $role = new Role(['name' => $data['name'], 'description' => $data['description'] ?? null, 'slug' => $this->uniqueSlug($data['name'])]);
             $role->forceFill(['is_system' => false])->save();
             $role->permissions()->sync($ids);
@@ -62,7 +62,7 @@ class RoleController extends Controller
         $ids = $this->permissionIds($request, $data['permissions'] ?? [], $role);
         $before = ['name' => $role->name, 'permissions' => $old];
 
-        DB::transaction(function () use ($role, $data, $ids, $before) {
+        Atomic::run(function () use ($role, $data, $ids, $before) {
             if (! $role->is_system) {
                 $role->fill(['name' => $data['name']]);
             }

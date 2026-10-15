@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Service;
 use App\Models\ServicePackage;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -32,7 +32,7 @@ class ServicePackageController extends Controller
     {
         $this->authorize('services.manage');
         $data = $this->validated($request);
-        $package = DB::transaction(function () use ($data, $request) {
+        $package = Atomic::run(function () use ($data, $request) {
             $package = ServicePackage::create(collect($data)->except('items')->all() + ['is_active' => $request->boolean('is_active')]);
             $this->syncItems($package, $data['items']);
             $this->audit->log('service_package.created', $package, null, ['name' => $package->name, 'price' => $package->price]);
@@ -55,7 +55,7 @@ class ServicePackageController extends Controller
     {
         $this->authorize('services.manage');
         $data = $this->validated($request, $package);
-        DB::transaction(function () use ($data, $request, $package) {
+        Atomic::run(function () use ($data, $request, $package) {
             $before = ['name' => $package->name, 'price' => $package->price];
             $package->fill(collect($data)->except('items')->all())->forceFill(['is_active' => $request->boolean('is_active')])->save();
             $this->syncItems($package, $data['items']);

@@ -9,8 +9,8 @@ use App\Models\Employee;
 use App\Models\Room;
 use App\Models\Service;
 use App\Models\User;
+use App\Support\Atomic;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -31,10 +31,11 @@ class AppointmentBookingService
      */
     public function create(array $data, User $actor, bool $override = false): Appointment
     {
-        return DB::transaction(function () use ($data, $actor, $override) {
-            $customer = Customer::withTrashed()->findOrFail($data['customer_id']);
+        return Atomic::run(function () use ($data, $actor, $override) {
+            // Lock stylists and rooms before reading anything else, so the transaction snapshot is taken after the lock.
             $walkIn = ($data['source'] ?? 'booking') === 'walk_in';
             $lines = $this->prepareLines($data, null, $override, $walkIn);
+            $customer = Customer::withTrashed()->whereKey($data['customer_id'])->lockForUpdate()->firstOrFail();
             $this->assertCustomer($customer, $lines, null);
 
             $appointment = new Appointment(['notes' => $data['notes'] ?? null]);
@@ -68,7 +69,7 @@ class AppointmentBookingService
     /** Replace the services / time of a not-yet-started appointment. */
     public function reschedule(Appointment $appointment, array $data, User $actor, bool $override = false, ?string $reason = null): Appointment
     {
-        return DB::transaction(function () use ($appointment, $data, $actor, $override, $reason) {
+        return Atomic::run(function () use ($appointment, $data, $actor, $override, $reason) {
             $appointment = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
             $this->assertEditable($appointment, $override, $reason);
 
@@ -168,7 +169,7 @@ class AppointmentBookingService
 
             if (! $this->availability->worksDuring($employee, $start, $end)) {
                 $errors["lines.$i.employee_id"] = "{$employee->name} is not working (or the salon is closed) at {$start->format('D H:i')}–{$end->format('H:i')}.";
-            } elseif ($this->availability->employeeHasConflict($employee->id, $start, $end, $ignoreId)) {
+            } elseif ($this->availability->employeeHasConflict($employee->id, $start, $end, $ignoreId, true)) {
                 $errors["lines.$i.employee_id"] = "{$employee->name} already has an appointment that overlaps {$start->format('H:i')}–{$end->format('H:i')}.";
             }
 
@@ -177,7 +178,7 @@ class AppointmentBookingService
                 $room = $rooms->get((int) $roomId);
                 if (! $room || ! $room->is_active) {
                     $errors["lines.$i.room_id"] = "The chair/room for service #$n is not available.";
-                } elseif ($this->availability->roomHasConflict($room->id, $start, $end, $ignoreId)) {
+                } elseif ($this->availability->roomHasConflict($room->id, $start, $end, $ignoreId, true)) {
                     $errors["lines.$i.room_id"] = "{$room->name} is already allocated during {$start->format('H:i')}–{$end->format('H:i')}.";
                 }
             }
@@ -221,7 +222,7 @@ class AppointmentBookingService
         $overlap = Appointment::where('customer_id', $customer->id)
             ->whereIn('status', AppointmentStatus::blockingValues())
             ->where('start_at', '<', $end)->where('end_at', '>', $start)
-            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists();
+            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->lockForUpdate()->first() !== null;
         if ($overlap) {
             throw ValidationException::withMessages(['customer_id' => 'This customer already has an appointment at that time.']);
         }

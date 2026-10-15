@@ -8,10 +8,13 @@ use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\PaymentMethod;
+use App\Models\Product;
 use App\Models\Service;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\CashDrawerService;
 use App\Services\CheckoutService;
+use App\Services\InventoryService;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -108,5 +111,25 @@ trait Concerns
 
         $nested = (new \DOMXPath($document))->query('//form//form');
         $this->assertSame(0, $nested->length, "{$url} contains a <form> nested inside another <form>.");
+    }
+
+    /** User holding every inventory permission (plus any extras). */
+    protected function stockKeeper(string ...$extra): User
+    {
+        return User::factory()->withPermissions('inventory.view', 'inventory.manage', 'inventory.adjust', 'inventory.purchasing', 'inventory.suppliers', 'inventory.costs', ...$extra)->create();
+    }
+
+    /** A product that already has stock on hand, entered through the ledger like real opening stock. */
+    protected function stockedProduct(string $stock = '10', string $cost = '5.00', array $attributes = []): Product
+    {
+        $product = Product::factory()->create($attributes);
+        app(InventoryService::class)->record($product->id, StockMovement::ADJUSTMENT_IN, $stock, null, 'Opening stock', 'opening', $product->id, $cost, "opening:{$product->id}", true);
+
+        return $product->fresh();
+    }
+
+    protected function stockOf(Product $product): string
+    {
+        return (string) $product->fresh()->current_stock;
     }
 }

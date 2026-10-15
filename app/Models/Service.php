@@ -43,6 +43,11 @@ class Service extends Model
         return $this->hasMany(ServiceAddon::class);
     }
 
+    public function consumables(): HasMany
+    {
+        return $this->hasMany(ServiceConsumable::class);
+    }
+
     public function priceHistories(): HasMany
     {
         return $this->hasMany(ServicePriceHistory::class)->latest('id');

@@ -17,6 +17,15 @@
             ['cash.index', 'Cash Drawer', 'bi-cash-stack', 'pos.drawer'],
             ['cash.daily', 'Daily Summary', 'bi-calendar-check', 'pos.close'],
         ],
+        'Inventory' => [
+            ['products.index', 'Products', 'bi-box-seam', 'inventory.view'],
+            ['movements.index', 'Stock Ledger', 'bi-journal-text', 'inventory.view'],
+            ['purchase-orders.index', 'Purchase Orders', 'bi-clipboard-check', 'inventory.purchasing'],
+            ['suppliers.index', 'Suppliers', 'bi-truck', 'inventory.suppliers'],
+            ['adjustments.index', 'Stock Adjustments', 'bi-sliders2', 'inventory.adjust'],
+            ['supplier-returns.index', 'Supplier Returns', 'bi-arrow-return-left', 'inventory.purchasing'],
+            ['inventory.valuation', 'Valuation', 'bi-cash-stack', 'inventory.costs'],
+        ],
         'Team' => [
             ['employees.index', 'Employees', 'bi-person-badge', 'employees.view'],
             ['schedules.index', 'Staff Schedule', 'bi-calendar3', 'employees.view'],
@@ -27,6 +36,7 @@
             ['roles.index', 'Roles & Permissions', 'bi-shield-lock', 'roles.manage'],
             ['settings.booking', 'Booking Settings', 'bi-gear', 'settings.manage'],
             ['settings.pos', 'POS Settings', 'bi-sliders', 'settings.manage'],
+            ['settings.inventory', 'Inventory Settings', 'bi-boxes', 'settings.manage'],
             ['audit.index', 'Audit Log', 'bi-journal-text', 'audit.view'],
         ],
     ];
@@ -39,7 +49,7 @@
         @if ($visible->isNotEmpty())
             <div class="nav-heading">{{ $heading }}</div>
             @foreach ($visible as [$route, $label, $icon])
-                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index', 'cash.daily', 'pos.index']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
+                <a class="nav-item {{ request()->routeIs($route) || (! in_array($route, ['appointments.calendar', 'appointments.list', 'categories.index', 'cash.daily', 'pos.index', 'movements.index', 'inventory.valuation']) && request()->routeIs(Str::beforeLast($route, '.').'.*')) ? 'active' : '' }}" href="{{ route($route) }}"><i class="bi {{ $icon }}"></i> {{ $label }}</a>
             @endforeach
         @endif
     @endforeach

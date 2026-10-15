@@ -61,7 +61,8 @@
     <div class="card mb-3 border-warning-subtle"><div class="card-header">Refund <span class="float-end text-muted">up to {{ money($refundable) }}</span></div><div class="card-body">
         <form method="post" action="{{ route('invoices.refunds.store', $invoice) }}" data-confirm="Process this refund? It cannot be undone.">@csrf<input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $refundKey) }}">
             @foreach ($invoice->items as $it) @php $left = $it->quantity - ($refundedQty[$it->id] ?? 0); @endphp @if ($left > 0)
-                <div class="d-flex align-items-center gap-2 mb-2"><input class="form-control form-control-sm" style="width:70px" type="number" min="0" max="{{ $left }}" name="quantities[{{ $it->id }}]" value="{{ old('quantities.'.$it->id, 0) }}" aria-label="Quantity of {{ $it->description }} to refund"><span class="small">{{ $it->description }} <span class="text-muted">(max {{ $left }})</span></span></div>@endif @endforeach
+                <div class="d-flex align-items-center gap-2 mb-2"><input class="form-control form-control-sm" style="width:70px" type="number" min="0" max="{{ $left }}" name="quantities[{{ $it->id }}]" value="{{ old('quantities.'.$it->id, 0) }}" aria-label="Quantity of {{ $it->description }} to refund"><span class="small">{{ $it->description }} <span class="text-muted">(max {{ $left }})</span></span>
+                    @if ($it->product_id)<label class="small ms-auto text-nowrap"><input type="hidden" name="restock[{{ $it->id }}]" value="0"><input type="checkbox" name="restock[{{ $it->id }}]" value="1" @checked(old('restock.'.$it->id))> return to stock</label>@endif</div>@endif @endforeach
             <x-select name="payment_method_id" label="Refund via" :options="$methods->pluck('name', 'id')->all()" />
             <x-input name="reason" label="Reason (required)" required />
             <x-input name="reference" label="Reference" />

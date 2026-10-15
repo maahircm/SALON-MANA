@@ -9,8 +9,8 @@ use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller
@@ -39,7 +39,7 @@ class EmployeeController extends Controller
 
     public function store(EmployeeRequest $request)
     {
-        $employee = DB::transaction(function () use ($request) {
+        $employee = Atomic::run(function () use ($request) {
             $data = $request->validated();
             $employee = new Employee(collect($data)->only((new Employee)->getFillable())->all());
             $employee->is_bookable = $request->boolean('is_bookable');
@@ -83,7 +83,7 @@ class EmployeeController extends Controller
 
     public function update(EmployeeRequest $request, Employee $employee)
     {
-        DB::transaction(function () use ($request, $employee) {
+        Atomic::run(function () use ($request, $employee) {
             $data = $request->validated();
             $oldStatus = $employee->status;
             $original = $employee->getOriginal();

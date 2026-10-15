@@ -6,7 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\AppointmentStatusHistory;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use App\Support\Atomic;
 use Illuminate\Validation\ValidationException;
 
 /** The only place an appointment's status changes. Validates the transition and writes history + audit. */
@@ -16,7 +16,7 @@ class AppointmentStatusService
 
     public function transition(Appointment $appointment, AppointmentStatus $to, User $actor, ?string $reason = null, bool $override = false): Appointment
     {
-        return DB::transaction(function () use ($appointment, $to, $actor, $reason, $override) {
+        return Atomic::run(function () use ($appointment, $to, $actor, $reason, $override) {
             $appointment = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
             $from = $appointment->status;
 

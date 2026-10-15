@@ -7,6 +7,7 @@
     $chosenCustomer = old('customer_id') ? \App\Models\Customer::find(old('customer_id')) : $cart['customer'];
     $idempotencyKey = old('idempotency_key', (string) \Illuminate\Support\Str::uuid());
     $jsServices = $services->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'category' => $s->category->name, 'price' => $s->currentPrice(), 'tax' => (string) $s->tax_rate])->values()->all();
+    $jsProducts = $products->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'sku' => $p->sku, 'barcode' => $p->barcode, 'price' => (string) $p->selling_price, 'tax' => (string) $p->tax_rate, 'stock' => (string) $p->current_stock, 'unit' => $p->unit])->values()->all();
     $jsEmployees = $employees->map(fn ($e) => ['id' => $e->id, 'name' => $e->name])->values()->all();
     $jsMethods = $methods->map(fn ($m) => ['id' => $m->id, 'name' => $m->name, 'type' => $m->type])->values()->all();
     $jsConfig = ['symbol' => config('salon.currency_symbol'), 'maxDiscount' => (string) $maxDiscount, 'canDiscount' => $canDiscount];
@@ -25,8 +26,11 @@
             <div class="list-group mt-1" id="customerResults"></div></div>
     </div></div>
     <div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">Items
-        <div class="d-flex gap-2"><select id="serviceSelect" class="form-select form-select-sm" style="min-width:260px" aria-label="Add service"><option value="">Add a service…</option>
-            @foreach ($services->groupBy('category.name') as $cat => $list)<optgroup label="{{ $cat }}">@foreach ($list as $s)<option value="{{ $s->id }}">{{ $s->name }} — {{ money($s->currentPrice()) }}</option>@endforeach</optgroup>@endforeach</select></div></div>
+        <div class="d-flex flex-wrap gap-2"><select id="serviceSelect" class="form-select form-select-sm" style="min-width:230px" aria-label="Add service"><option value="">Add a service…</option>
+            @foreach ($services->groupBy('category.name') as $cat => $list)<optgroup label="{{ $cat }}">@foreach ($list as $s)<option value="{{ $s->id }}">{{ $s->name }} — {{ money($s->currentPrice()) }}</option>@endforeach</optgroup>@endforeach</select>
+            @if ($products->isNotEmpty())<select id="productSelect" class="form-select form-select-sm" style="min-width:230px" aria-label="Add product"><option value="">Add a product…</option>
+                @foreach ($products as $p)<option value="{{ $p->id }}" @disabled(\App\Support\Quantity::compare($p->current_stock, '0') <= 0)>{{ $p->name }} — {{ money($p->selling_price) }} ({{ rtrim(rtrim((string) $p->current_stock, '0'), '.') ?: '0' }} {{ $p->unit }})</option>@endforeach</select>
+            <input id="barcodeInput" class="form-control form-control-sm" style="width:170px" placeholder="Scan barcode ↵" aria-label="Barcode" autocomplete="off">@endif</div></div>
         <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Service</th><th style="width:80px">Qty</th><th>Provider</th>@if ($canDiscount)<th style="width:190px">Discount</th>@endif<th class="text-end">Total</th><th></th></tr></thead><tbody id="cartBody"></tbody></table></div>
         <div id="cartEmpty" class="p-4 text-center text-muted">Pick a service above, or open an appointment's checkout.</div>
     </div>
@@ -64,6 +68,7 @@
 (function () {
   const cfg = {{ Illuminate\Support\Js::from($jsConfig) }};
   const services = {{ Illuminate\Support\Js::from($jsServices) }};
+  const products = {{ Illuminate\Support\Js::from($jsProducts) }};
   const employees = {{ Illuminate\Support\Js::from($jsEmployees) }};
   const methods = {{ Illuminate\Support\Js::from($jsMethods) }};
   let items = {{ Illuminate\Support\Js::from($initialItems) }};
@@ -74,10 +79,12 @@
   const fmt = c => cfg.symbol + (c / 100).toFixed(2);
   const pct = (amountCents, rate) => { const bp = cents(rate); return Math.floor((amountCents * bp * 2 + 10000) / 20000); };
   const svc = id => services.find(s => String(s.id) === String(id));
+  const prod = id => products.find(p => String(p.id) === String(id));
+  const ref = it => it.product_id ? prod(it.product_id) : svc(it.service_id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function lineMath(it) {
-    const s = svc(it.service_id); if (!s) return { gross: 0, disc: 0, tax: 0, total: 0 };
+    const s = ref(it); if (!s) return { gross: 0, disc: 0, tax: 0, total: 0 };
     const booked = !!it.appointment_service_id;
     const qty = booked ? 1 : Math.max(1, parseInt(it.quantity || 1, 10));
     const gross = cents(s.price) * qty;
@@ -96,9 +103,9 @@
     const body = document.getElementById('cartBody'); body.innerHTML = '';
     document.getElementById('cartEmpty').classList.toggle('d-none', items.length > 0);
     items.forEach((it, i) => {
-      const s = svc(it.service_id); const m = lineMath(it); const booked = !!it.appointment_service_id;
+      const s = ref(it); const m = lineMath(it); const booked = !!it.appointment_service_id;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${esc(s ? s.name : 'Unknown service')}${booked ? ' <span class="badge text-bg-info">booked</span>' : ''}<div class="small text-muted">${s ? fmt(cents(s.price)) + ' · tax ' + s.tax + '%' : ''}</div></td>
+      tr.innerHTML = `<td>${esc(s ? s.name : 'Unknown item')}${it.product_id ? ' <span class="badge text-bg-secondary">product</span>' : ''}${booked ? ' <span class="badge text-bg-info">booked</span>' : ''}<div class="small text-muted">${s ? fmt(cents(s.price)) + ' · tax ' + s.tax + '%' + (it.product_id ? ' · ' + s.stock + ' ' + s.unit + ' in stock' : '') : ''}</div></td>
         <td><input type="number" min="1" max="99" class="form-control form-control-sm" value="${booked ? 1 : (it.quantity || 1)}" ${booked ? 'disabled' : ''} data-f="quantity" aria-label="Quantity"></td>
         <td><select class="form-select form-select-sm" data-f="employee_id" aria-label="Provider"><option value="">—</option>${employees.map(e => `<option value="${e.id}" ${String(it.employee_id) === String(e.id) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></td>
         ${cfg.canDiscount ? `<td><div class="input-group input-group-sm"><select class="form-select" data-f="discount_type" aria-label="Discount type"><option value="none">None</option><option value="percent" ${it.discount_type === 'percent' ? 'selected' : ''}>%</option><option value="fixed" ${it.discount_type === 'fixed' ? 'selected' : ''}>${cfg.symbol}</option></select><input type="number" min="0" step="0.01" class="form-control" value="${it.discount_value || ''}" data-f="discount_value" aria-label="Discount value"></div></td>` : ''}
@@ -143,6 +150,19 @@
   document.getElementById('serviceSelect').addEventListener('change', e => {
     if (!e.target.value) return; items.push({ service_id: e.target.value, quantity: 1, employee_id: '', discount_type: 'none', discount_value: '' }); e.target.value = ''; render();
   });
+  const productSelect = document.getElementById('productSelect');
+  if (productSelect) productSelect.addEventListener('change', e => {
+    if (!e.target.value) return; items.push({ product_id: e.target.value, quantity: 1, employee_id: '', discount_type: 'none', discount_value: '' }); e.target.value = ''; render();
+  });
+  const barcode = document.getElementById('barcodeInput');
+  if (barcode) barcode.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return; e.preventDefault();
+    const code = barcode.value.trim(); const p = products.find(x => x.barcode === code || x.sku === code); barcode.value = '';
+    if (!p) { barcode.classList.add('is-invalid'); return; } barcode.classList.remove('is-invalid');
+    const existing = items.find(i => String(i.product_id) === String(p.id) && (!i.discount_type || i.discount_type === 'none'));
+    if (existing) existing.quantity = parseInt(existing.quantity || 1, 10) + 1; else items.push({ product_id: p.id, quantity: 1, employee_id: '', discount_type: 'none', discount_value: '' });
+    render();
+  });
   document.getElementById('addPayment').addEventListener('click', () => { payments.push({ payment_method_id: methods[0]?.id, amount: '' }); renderPayments(); renderTotals(); });
   document.getElementById('payRemaining').addEventListener('click', () => {
     const t = totals(); const paidOthers = payments.slice(1).reduce((a, p) => a + cents(p.amount), 0);
@@ -154,7 +174,7 @@
   document.getElementById('posForm').addEventListener('submit', () => {
     const box = document.getElementById('hiddenInputs'); box.innerHTML = '';
     const add = (n, v) => { if (v === undefined || v === null) return; const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; box.appendChild(i); };
-    items.forEach((it, i) => ['service_id', 'appointment_service_id', 'quantity', 'employee_id', 'discount_type', 'discount_value'].forEach(f => add(`items[${i}][${f}]`, it[f] ?? '')));
+    items.forEach((it, i) => ['service_id', 'product_id', 'appointment_service_id', 'quantity', 'employee_id', 'discount_type', 'discount_value'].forEach(f => add(`items[${i}][${f}]`, it[f] ?? '')));
     payments.filter(p => p.amount !== '' && p.amount !== undefined).forEach((p, i) => ['payment_method_id', 'amount', 'reference', 'tendered'].forEach(f => add(`payments[${i}][${f}]`, p[f] ?? '')));
   }, true);
 

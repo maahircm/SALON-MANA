@@ -9,9 +9,9 @@ use App\Models\CustomerPreference;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Services\AuditLogger;
+use App\Support\Atomic;
 use App\Support\Money;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -44,7 +44,7 @@ class CustomerController extends Controller
             return back()->withInput()->with('duplicates', $dups->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'number' => $c->customer_number])->all());
         }
 
-        $customer = DB::transaction(function () use ($request, $data) {
+        $customer = Atomic::run(function () use ($request, $data) {
             $customer = new Customer(collect($data)->except(['confirm_duplicate', 'marketing_consent'])->all());
             $consent = $request->boolean('marketing_consent');
             $customer->forceFill([
@@ -99,7 +99,7 @@ class CustomerController extends Controller
             return back()->withInput()->with('duplicates', $dups->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'number' => $c->customer_number])->all());
         }
 
-        DB::transaction(function () use ($request, $customer, $data) {
+        Atomic::run(function () use ($request, $customer, $data) {
             $original = $customer->getOriginal();
             $customer->fill(collect($data)->except(['confirm_duplicate', 'marketing_consent'])->all());
             $consent = $request->boolean('marketing_consent');
@@ -161,7 +161,7 @@ class CustomerController extends Controller
             throw ValidationException::withMessages(['customer' => 'Cancel or complete the customer\'s open appointments before anonymizing.']);
         }
 
-        DB::transaction(function () use ($customer, $request) {
+        Atomic::run(function () use ($customer, $request) {
             $customer->preferences()->delete();
             $customer->forceFill([
                 'name' => 'Anonymized customer', 'phone' => null, 'phone_normalized' => null, 'email' => null, 'date_of_birth' => null,
